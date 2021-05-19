@@ -1063,19 +1063,8 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 		return ret;
 	/* configure clocks */
 	ret = vd55g0_write_reg32(sensor, DEVICE_EXT_CLOCK, sensor->clk_freq);
-	if (ret)
-		return ret;
-	//ret = vd55g0_write_reg(sensor, DEVICE_CLK_PLL_PREDIV, prediv);
-	//if (ret)
-	//	return ret;
-	//ret = vd55g0_write_reg(sensor, DEVICE_CLK_SYS_PLL_MULT, mult);
-	//if (ret)
-	//	return ret;
 	/* configure interface */
-	ret = vd55g0_read_reg16(sensor, DEVICE_OIF_CTRL, &oif_ctrl);
-	oif_ctrl |= 1 << 3;
-	oif_ctrl |= 1 << 6;
-	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, oif_ctrl);
+	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, sensor->oif_ctrl);
 	if (ret)
 		return ret;
 	dev_dbg(&client->dev, "oif_ctrl_updatedv = 0x%x prev = 0x%x", oif_ctrl, sensor->oif_ctrl);
@@ -1609,8 +1598,6 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->manual_expo_ms = 10;
 	sensor->expo_state = VD55GO_EXPO_AUTO;
 
-	ret = vd55g0_read_reg16(sensor, DEVICE_MODEL_ID_REG, &id);
-
 	endpoint = fwnode_graph_get_next_endpoint(
 		of_fwnode_handle(dev->of_node), NULL);
 	if (!endpoint) {
@@ -1680,10 +1667,6 @@ static int vd55g0_probe(struct i2c_client *client)
 		goto entity_cleanup;
 	}
 
-	/* apply reset sequence */
-	if (sensor->reset_gpio)
-		vd55g0_apply_reset(sensor);
-	
 	ret = clk_prepare_enable(sensor->xclk);
 	if (ret) {
 		dev_err(&client->dev, "failed to enable clock %d", ret);
@@ -1692,6 +1675,9 @@ static int vd55g0_probe(struct i2c_client *client)
 
 	mutex_init(&sensor->lock);
 
+	/* apply reset sequence */
+	if (sensor->reset_gpio)
+		vd55g0_apply_reset(sensor);
 
 	ret = vd55g0_detect(sensor);
 	if (ret) {
@@ -1776,5 +1762,6 @@ static struct i2c_driver vd55g0_i2c_driver = {
 module_i2c_driver(vd55g0_i2c_driver);
 
 MODULE_AUTHOR("Mickael Guene <mickael.guene@st.com>");
+MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@st.com>");
 MODULE_DESCRIPTION("vd55g0 based FoXy Camera Subdev Driver");
 MODULE_LICENSE("GPL v2");
