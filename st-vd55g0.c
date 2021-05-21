@@ -670,6 +670,8 @@ static int vd55g0_try_fmt_internal(struct v4l2_subdev *sd,
 				   struct v4l2_mbus_framefmt *fmt,
 				   const struct vd55g0_mode_info **new_mode)
 {
+	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
+	struct i2c_client *client = sensor->i2c_client;
 	const struct vd55g0_mode_info *mode = vd55g0_mode_data;
 	unsigned int index;
 	unsigned int i;
@@ -679,17 +681,22 @@ static int vd55g0_try_fmt_internal(struct v4l2_subdev *sd,
 		if (vd55g0_supported_codes[index] == fmt->code)
 			break;
 	}
-	if (index == ARRAY_SIZE(vd55g0_supported_codes))
-		index = 0;
+	if (index == ARRAY_SIZE(vd55g0_supported_codes)) {
+		dev_err(&client->dev, "code %d not supported\n", fmt->code);
+		return -EINVAL;
+	}
 
 	/* select size */
 	for (i = 0; i < ARRAY_SIZE(vd55g0_mode_data); i++) {
-		if (mode->width <= fmt->width && mode->height <= fmt->height)
+		if (mode->width == fmt->width && mode->height == fmt->height)
 			break;
 		mode++;
 	}
-	if (i == ARRAY_SIZE(vd55g0_mode_data))
-		mode--;
+	if (i == ARRAY_SIZE(vd55g0_mode_data)) {
+		dev_err(&client->dev, "size %dx%d not supported\n",
+				fmt->width, fmt->height);
+		return -EINVAL;
+	}
 
 	*new_mode = mode;
 	fmt->code = vd55g0_supported_codes[index];
