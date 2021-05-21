@@ -68,8 +68,8 @@
 #define DEVICE_GPIO_3_CTRL				0x046a
 #define DEVICE_READOUT_CTRL				0x047a
 
-#define SENSOR_WIDTH					640
-#define SENSOR_HEIGHT					600
+#define SENSOR_WIDTH					644
+#define SENSOR_HEIGHT					604
 
 #define V4L2_CID_GPIO0_MODE			(V4L2_CID_USER_BASE | 0x1010)
 #define V4L2_CID_GPIO1_MODE			(V4L2_CID_USER_BASE | 0x1011)
@@ -133,10 +133,11 @@ static const u32 vd55g0_supported_codes[] = {
 const int vd55g0_sensor_frame_rates[] = { 90, 60, 50, 30, 25, 15, 10, 5, 1 };
 
 static const struct vd55g0_mode_info vd55g0_mode_data[] = {
-	{ 640,  600, 0, 0},{ 640,  482, 0, 1},
-	{ 640,  480, 0, 0},{ 480,  642, 1, 1},
-	{ 480,  640, 1, 0},{ 320,  242, 1, 1},
-	{ 320,  240, 1, 0},{ 240,  320, 2, 0},
+	{ 644,  606, 0, 1}, { 644,  604, 0, 0},
+	{ 640,  482, 0, 1}, { 640,  480, 0, 0},
+	{ 480,  642, 1, 1}, { 480,  640, 1, 0},
+	{ 320,  242, 1, 1}, { 320,  240, 1, 0},
+	{ 240,  320, 2, 0},
 };
 
 enum vd55g0_expo_state {
