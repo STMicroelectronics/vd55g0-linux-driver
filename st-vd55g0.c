@@ -152,7 +152,6 @@ struct vd55g0_dev {
 	struct media_pad pad;
 	struct regulator_bulk_data supplies[VD55G0_NUM_SUPPLIES];
 	struct gpio_desc *reset_gpio;
-	struct gpio_desc *pwr_reset;
 	struct clk *xclk;
 	u32 clk_freq;
 	u16 oif_ctrl;
@@ -635,7 +634,6 @@ static void vd55g0_apply_reset(struct vd55g0_dev *sensor)
 	usleep_range(5000, 10000);
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
-	gpiod_set_value_cansleep(sensor->pwr_reset, 1);
 }
 
 static int vd55g0_detect(struct vd55g0_dev *sensor)
@@ -762,20 +760,6 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 				 center_y + height / 2 - 1);
 	if (ret)
 		return ret;
-#if 1
-	dev_info(&client->dev, "setting gpio PWM");
-	//TODO check it does not interfere
-	ret = vd55g0_write_reg(sensor, DEVICE_GPIO_0_CTRL, 0x03);
-    // To get 100 microsecond on time
-    // Clock_divider [0x:472] : 59999 (0xea5f)
-    // Duty_cycle[0x470] : 12 (25%)
-	reg = 0x472;
-	val = 0xea5f;
-	ret = vd55g0_write_reg16(sensor, reg, val);
-	reg = 0x470;
-	val = 0x0C;
-	ret = vd55g0_write_reg16(sensor, reg, val);
-#endif
 
 	/* configure frame rate */
 	ret = set_frame_rate(sensor);
@@ -1568,8 +1552,6 @@ static int vd55g0_probe(struct i2c_client *client)
 
 	/* request optional reset pin */
 	sensor->reset_gpio = devm_gpiod_get_optional(dev, "reset",
-						     GPIOD_OUT_HIGH);
-	sensor->pwr_reset = devm_gpiod_get_optional(dev, "power",
 						     GPIOD_OUT_HIGH);
 	ret = vd55g0_get_regulators(sensor);
 	if (ret) {
