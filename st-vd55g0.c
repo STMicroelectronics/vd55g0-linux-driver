@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Driver for VD55GO global shutter sensor
+ * Driver for VD55G0 global shutter sensor
  *
  * Copyright (C) STMicroelectronics SA 2019
  * Authors: Mickael Guene <mickael.guene@st.com>
@@ -8,7 +8,6 @@
  *
  */
 
-#define DEBUG
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -20,18 +19,21 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
+
 #include <linux/version.h>
+
 #define WRITE_MULTIPLE_CHUNK_MAX			16
+
 #define DEVICE_MODEL_ID_REG				0x0000
-#define VD55GO_MODEL_ID					0x4730  
-#define DEVICE_FWPATCH_REVISION			0x0022  
-#define DEVICE_SYSTEM_FSM				0x002c 
-#define SENSOR_READY_TO_BOOT			0x01
+#define VD55G0_MODEL_ID					0x4730
+#define DEVICE_FWPATCH_REVISION				0x0022
+#define DEVICE_SYSTEM_FSM				0x002c
+#define SENSOR_READY_TO_BOOT				0x01
 #define SENSOR_SW_STBY					0x02
 #define SENSOR_STREAMING				0x03
 #define DEVICE_TEMPERATURE				0x004c
-#define DEVICE_BOOT						0x0200
-#define CMD_BOOT						1
+#define DEVICE_BOOT					0x0200
+#define CMD_BOOT					1
 #define CMD_PATCH_SETUP					2
 #define DEVICE_SW_STBY					0x0201
 #define CMD_START_STREAM				1
@@ -39,20 +41,14 @@
 #define DEVICE_STREAMING				0x0202
 #define CMD_STOP_STREAM					1
 #define DEVICE_EXT_CLOCK				0x0220
-//#define DEVICE_CLK_PLL_PREDIV			0x0224  //NOt present at FoXy to be modified
-//#define DEVICE_CLK_SYS_PLL_MULT			0x0226  //NOt presetn at FoXy to be modified
 #define DEVICE_LINE_LENGTH				0x0300
 #define DEVICE_ORIENTATION				0x0302
 #define DEVICE_FORMAT_CTRL				0x030a
 #define DEVICE_OIF_CTRL					0x030c
 #define DEVICE_OIF_IMG_CTRL				0x030f
 #define DEVICE_OIF_ISL_CTRL				0x0310
-#define DEVICE_OIF_CSI_BITRATE			0x0224  //Changed from Statics to sensor settings 
+#define DEVICE_OIF_CSI_BITRATE				0x0224  //Changed from Statics to sensor settings 
 #define DEVICE_ISL_ENABLE				0x0329
-//#define DEVICE_OUTPUT_CTRL				0x0334  // No Output CTRL Flow For FoXy
-//#define OUTPUT_CTRL_OPTICAL_FLOW			0   //NO Optical Flow for FoXy
-//#define OUTPUT_CTRL_IMAGE				1       // No Optical Flow for FoXy
-//#define OUTPUT_CTRL__OPTICAL_FLOW_AND_IMAGE		2  // No Optical Flow for FoXy
 #define DEVICE_PATGEN_CTRL				0x0400
 #define DEVICE_EXP_MODE					0x044c
 #define DEVICE_MANUAL_ANALOG_GAIN			0x044d
@@ -70,23 +66,15 @@
 #define DEVICE_GPIO_1_CTRL				0x0468
 #define DEVICE_GPIO_2_CTRL				0x0469
 #define DEVICE_GPIO_3_CTRL				0x046a
-//#define DEVICE_GPIO_4_CTRL				0x046b
-//#define DEVICE_GPIO_5_CTRL				0x046c
-//#define DEVICE_GPIO_6_CTRL				0x046d
-//#define DEVICE_GPIO_7_CTRL				0x046e
 #define DEVICE_READOUT_CTRL				0x047a
 
 #define SENSOR_WIDTH					640
 #define SENSOR_HEIGHT					600
 
-#define V4L2_CID_GPIO0_MODE			(V4L2_CID_USER_BASE | 0x1010)  //Need Kalyan Help
-#define V4L2_CID_GPIO1_MODE			(V4L2_CID_USER_BASE | 0x1011)  //Need Kalyan Help
-#define V4L2_CID_GPIO2_MODE			(V4L2_CID_USER_BASE | 0x1012)  //Need Kalyan Help
-#define V4L2_CID_GPIO3_MODE			(V4L2_CID_USER_BASE | 0x1013)  //Need Kalyan Help
-//#define V4L2_CID_GPIO4_MODE			(V4L2_CID_USER_BASE | 0x1014)
-//#define V4L2_CID_GPIO5_MODE			(V4L2_CID_USER_BASE | 0x1015)
-//#define V4L2_CID_GPIO6_MODE			(V4L2_CID_USER_BASE | 0x1016)
-//#define V4L2_CID_GPIO7_MODE			(V4L2_CID_USER_BASE | 0x1017)
+#define V4L2_CID_GPIO0_MODE			(V4L2_CID_USER_BASE | 0x1010)
+#define V4L2_CID_GPIO1_MODE			(V4L2_CID_USER_BASE | 0x1011)
+#define V4L2_CID_GPIO2_MODE			(V4L2_CID_USER_BASE | 0x1012)
+#define V4L2_CID_GPIO3_MODE			(V4L2_CID_USER_BASE | 0x1013)
 
 #define V4L2_CID_TEMPERATURE			(V4L2_CID_USER_BASE | 0x1020)
 
@@ -96,8 +84,6 @@ static const char * const vd55g0_test_pattern_menu[] = {
 	"Disabled", "Solid", "Colorbar", "Gradbar",
 	"Hgrey", "Vgrey", "Dgrey", "PN28"
 };
-
-//To Be Validated
 
 static const char * const vd55g0_gpios_modes[] = {
 	"disabled",
@@ -112,7 +98,7 @@ static const char * const vd55g0_supply_name[] = {
 	"VANA",
 };
 
-#define VD55GO_NUM_SUPPLIES		ARRAY_SIZE(vd55g0_supply_name)
+#define VD55G0_NUM_SUPPLIES		ARRAY_SIZE(vd55g0_supply_name)
 
 static const s64 link_freq[] = {
 	402000000ULL
@@ -152,19 +138,18 @@ static const struct vd55g0_mode_info vd55g0_mode_data[] = {
 	{ 480,  640, 1, 0},{ 320,  242, 1, 1},
 	{ 320,  240, 1, 0},{ 240,  320, 2, 0},
 };
-// MOdified resolution as per Foxy resolution
 
 enum vd55g0_expo_state {
-	VD55GO_EXPO_AUTO,
-	VD55GO_EXPO_AUTO_FREEZE,
-	VD55GO_EXPO_MANUAL
+	VD55G0_EXPO_AUTO,
+	VD55G0_EXPO_AUTO_FREEZE,
+	VD55G0_EXPO_MANUAL
 };
 
 struct vd55g0_dev {
 	struct i2c_client *i2c_client;
 	struct v4l2_subdev sd;
 	struct media_pad pad;
-	struct regulator_bulk_data supplies[VD55GO_NUM_SUPPLIES];
+	struct regulator_bulk_data supplies[VD55G0_NUM_SUPPLIES];
 	struct gpio_desc *reset_gpio;
 	struct gpio_desc *pwr_reset;
 	struct clk *xclk;
@@ -289,12 +274,14 @@ static int vd55g0_read_reg(struct vd55g0_dev *sensor, u16 reg, u8 *val)
 	msg[1].flags = client->flags | I2C_M_RD;
 	msg[1].buf = val;
 	msg[1].len = 1;
+
 	ret = i2c_transfer(client->adapter, msg, 2);
 	if (ret < 0) {
 		dev_dbg(&client->dev, "%s: %x i2c_transfer, reg: %x => %d\n",
 			__func__, client->addr, reg, ret);
 		return ret;
 	}
+
 	return 0;
 }
 
@@ -447,11 +434,11 @@ static int vd55g0_get_regulators(struct vd55g0_dev *sensor)
 {
 	int i;
 
-	for (i = 0; i < VD55GO_NUM_SUPPLIES; i++)
+	for (i = 0; i < VD55G0_NUM_SUPPLIES; i++)
 		sensor->supplies[i].supply = vd55g0_supply_name[i];
 
 	return devm_regulator_bulk_get(&sensor->i2c_client->dev,
-				       VD55GO_NUM_SUPPLIES,
+				       VD55G0_NUM_SUPPLIES,
 				       sensor->supplies);
 }
 
@@ -516,20 +503,20 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 {
 	int ret;
 
-	/* VD55GO_EXPO_AUTO_FREEZE => VD55GO_EXPO_MANUAL is invalid */
-	if (sensor->expo_state == VD55GO_EXPO_AUTO_FREEZE &&
+	/* VD55G0_EXPO_AUTO_FREEZE => VD55G0_EXPO_MANUAL is invalid */
+	if (sensor->expo_state == VD55G0_EXPO_AUTO_FREEZE &&
 	    index == V4L2_EXPOSURE_MANUAL)
 		return -EINVAL;
 
 	switch (index) {
 	case V4L2_EXPOSURE_AUTO:
 		ret = vd55g0_write_reg(sensor, DEVICE_EXP_MODE, EXP_MODE_AUTO);
-		sensor->expo_state = VD55GO_EXPO_AUTO;
+		sensor->expo_state = VD55G0_EXPO_AUTO;
 		break;
 	case V4L2_EXPOSURE_MANUAL:
 		ret = vd55g0_write_reg(sensor, DEVICE_EXP_MODE,
 				       EXP_MODE_MANUAL);
-		sensor->expo_state = VD55GO_EXPO_MANUAL;
+		sensor->expo_state = VD55G0_EXPO_MANUAL;
 		break;
 	default:
 		ret = -EINVAL;
@@ -545,7 +532,7 @@ static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, u32 is_lock)
 		return -EINVAL;
 
 	/* we can't lock / unlock if we are in manual mode */
-	if (sensor->expo_state == VD55GO_EXPO_MANUAL)
+	if (sensor->expo_state == VD55G0_EXPO_MANUAL)
 		return -EINVAL;
 
 	return vd55g0_write_reg(sensor, DEVICE_EXP_MODE,
@@ -648,9 +635,6 @@ static int vd55g0_set_exposure(struct vd55g0_dev *sensor, int expo_ms)
 
 static void vd55g0_apply_reset(struct vd55g0_dev *sensor)
 {
-	struct i2c_client *client = sensor->i2c_client;
-
-	dev_dbg(&client->dev, "%s", __func__);
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
 	gpiod_set_value_cansleep(sensor->reset_gpio, 1);
@@ -674,7 +658,7 @@ static int vd55g0_detect(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	if (id != VD55GO_MODEL_ID) {
+	if (id != VD55G0_MODEL_ID) {
 		dev_warn(&client->dev, "Unsupported sensor id %x", id);
 		return -ENODEV;
 	}
@@ -729,7 +713,6 @@ static int set_frame_rate(struct vd55g0_dev *sensor)
 
 static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 {
-	struct i2c_client *client = sensor->i2c_client;
 	int center_x = SENSOR_WIDTH / 2;
 	int center_y = SENSOR_HEIGHT / 2;
 	int is_isl = sensor->current_mode->is_isl;
@@ -737,7 +720,6 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 	int width = sensor->current_mode->width * scale;
 	int height = sensor->current_mode->height * scale;
 	int ret;
-	int reg, val;
 
 	if (is_isl)
 		height -= 2 *scale;
@@ -779,7 +761,9 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 				 center_y + height / 2 - 1);
 	if (ret)
 		return ret;
+#if 1
 	dev_info(&client->dev, "setting gpio PWM");
+	//TODO check it does not interfere
 	ret = vd55g0_write_reg(sensor, DEVICE_GPIO_0_CTRL, 0x03);
     // To get 100 microsecond on time
     // Clock_divider [0x:472] : 59999 (0xea5f)
@@ -790,6 +774,7 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 	reg = 0x470;
 	val = 0x0C;
 	ret = vd55g0_write_reg16(sensor, reg, val);
+#endif
 
 	/* configure frame rate */
 	ret = set_frame_rate(sensor);
@@ -923,8 +908,7 @@ static int vd55g0_rx_from_ep(struct vd55g0_dev *sensor,
 	int p, l;
 	int ret;
 	int i;
-	
-	
+
 	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &ep);
 	if (ret)
 		goto error_alloc;
@@ -1010,7 +994,7 @@ static int vd55g0_patch(struct vd55g0_dev *sensor)
 	ret = vd55g0_read_reg16(sensor, DEVICE_FWPATCH_REVISION, &patch);
 	if (ret)
 		return ret;
-// K:DEVICE_FWPATCH_REVISION_MAJOR/Minor info missing
+
 	if (patch != (DEVICE_FWPATCH_REVISION_MAJOR << 8) +
 	    DEVICE_FWPATCH_REVISION_MINOR) {
 		dev_err(&client->dev, "bad patch version expected %d.%d got %d.%d",
@@ -1063,6 +1047,23 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 		return ret;
 	/* configure clocks */
 	ret = vd55g0_write_reg32(sensor, DEVICE_EXT_CLOCK, sensor->clk_freq);
+#if 0
+	if (ret)
+		return ret;
+	ret = vd55g0_write_reg(sensor, DEVICE_CLK_PLL_PREDIV, prediv);
+	if (ret)
+		return ret;
+	ret = vd55g0_write_reg(sensor, DEVICE_CLK_SYS_PLL_MULT, mult);
+	if (ret)
+		return ret;
+	/* configure interface */
+	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, sensor->oif_ctrl);
+#endif
+#if 0
+	oif_ctrl |= 1 << 3;
+	oif_ctrl |= 1 << 6;
+	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, oif_ctrl);
+#endif
 	/* configure interface */
 	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, sensor->oif_ctrl);
 	if (ret)
@@ -1071,12 +1072,6 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CSI_BITRATE, 804);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg(sensor, DEVICE_ISL_ENABLE, 0);
-	if (ret)
-		return ret;
-	//ret = vd55g0_write_reg(sensor, DEVICE_OUTPUT_CTRL, OUTPUT_CTRL_IMAGE);
-	//if (ret)
-	//	return ret;
 	/* use auto expo by default */
 	ret = vd55g0_write_reg(sensor, DEVICE_EXP_MODE, EXP_MODE_AUTO);
 	if (ret)
@@ -1090,8 +1085,6 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 
 	sensor->data_rate_in_mbps = (mult * sensor->clk_freq) / prediv;
 	sensor->pclk = (sensor->data_rate_in_mbps * 2) / 10;
-	dev_dbg(&client->dev, "clock prediv = %d", prediv);
-	dev_dbg(&client->dev, "clock mult = %d", mult);
 	dev_info(&client->dev, "data rate = %d mbps",
 		 sensor->data_rate_in_mbps);
 
@@ -1411,13 +1404,6 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_GPIO1_MODE:
 	case V4L2_CID_GPIO2_MODE:
 	case V4L2_CID_GPIO3_MODE:
-	//Need to Remove
-	#if 0
-	case V4L2_CID_GPIO4_MODE:
-	case V4L2_CID_GPIO5_MODE:
-	case V4L2_CID_GPIO6_MODE:
-	case V4L2_CID_GPIO7_MODE:
-	#endif
 		ret = vd55g0_update_gpiox_strobe_mode(sensor, ctrl->val,
 			ctrl->id - V4L2_CID_GPIO0_MODE);
 		break;
@@ -1470,43 +1456,6 @@ static const struct v4l2_ctrl_config vd55g0_gpio3_ctrl = {
 	.max		= ARRAY_SIZE(vd55g0_gpios_modes) - 1,
 	.qmenu		= vd55g0_gpios_modes,
 };
-#if 0
-static const struct v4l2_ctrl_config vd55g0_gpio4_ctrl = {
-	.ops		= &vd55g0_ctrl_ops,
-	.id		= V4L2_CID_GPIO4_MODE,
-	.name		= "Gpio4 mode",
-	.type		= V4L2_CTRL_TYPE_MENU,
-	.max		= ARRAY_SIZE(vd55g0_gpios_modes) - 1,
-	.qmenu		= vd55g0_gpios_modes,
-};
-
-static const struct v4l2_ctrl_config vd55g0_gpio5_ctrl = {
-	.ops		= &vd55g0_ctrl_ops,
-	.id		= V4L2_CID_GPIO5_MODE,
-	.name		= "Gpio5 mode",
-	.type		= V4L2_CTRL_TYPE_MENU,
-	.max		= ARRAY_SIZE(vd55g0_gpios_modes) - 1,
-	.qmenu		= vd55g0_gpios_modes,
-};
-// K Need to Remove
-static const struct v4l2_ctrl_config vd55g0_gpio6_ctrl = {
-	.ops		= &vd55g0_ctrl_ops,
-	.id		= V4L2_CID_GPIO6_MODE,
-	.name		= "Gpio6 mode",
-	.type		= V4L2_CTRL_TYPE_MENU,
-	.max		= ARRAY_SIZE(vd55g0_gpios_modes) - 1,
-	.qmenu		= vd55g0_gpios_modes,
-};
-// K Need to Remove
-static const struct v4l2_ctrl_config vd55g0_gpio7_ctrl = {
-	.ops		= &vd55g0_ctrl_ops,
-	.id		= V4L2_CID_GPIO7_MODE,
-	.name		= "Gpio7 mode",
-	.type		= V4L2_CTRL_TYPE_MENU,
-	.max		= ARRAY_SIZE(vd55g0_gpios_modes) - 1,
-	.qmenu		= vd55g0_gpios_modes,
-};
-# endif
 static const struct v4l2_ctrl_config vd55g0_temp_ctrl = {
 	.ops		= &vd55g0_ctrl_ops,
 	.id		= V4L2_CID_TEMPERATURE,
@@ -1555,10 +1504,6 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio1_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio2_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio3_ctrl, NULL);
-//	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio4_ctrl, NULL);
-//	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio5_ctrl, NULL);
-//	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio6_ctrl, NULL);
-//	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio7_ctrl, NULL);
 	/* temperature */
 	ctrl = v4l2_ctrl_new_custom(hdl, &vd55g0_temp_ctrl, NULL);
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
@@ -1582,8 +1527,7 @@ static int vd55g0_probe(struct i2c_client *client)
 	struct fwnode_handle *endpoint;
 	struct vd55g0_dev *sensor;
 	int ret;
-	uint16_t id = 0;
-	//uint32_t xclk_freq;
+
 	sensor = devm_kzalloc(dev, sizeof(*sensor), GFP_KERNEL);
 	if (!sensor)
 		return -ENOMEM;
@@ -1596,7 +1540,7 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->frame_interval.numerator = 1;
 	sensor->frame_interval.denominator = 15;
 	sensor->manual_expo_ms = 10;
-	sensor->expo_state = VD55GO_EXPO_AUTO;
+	sensor->expo_state = VD55G0_EXPO_AUTO;
 
 	endpoint = fwnode_graph_get_next_endpoint(
 		of_fwnode_handle(dev->of_node), NULL);
@@ -1616,21 +1560,6 @@ static int vd55g0_probe(struct i2c_client *client)
 		dev_err(dev, "failed to get xclk\n");
 		return PTR_ERR(sensor->xclk);
 	}
-#if 0
-	/* get ‘clock-frequency’ from device tree */
-        ret = of_property_read_u32(dev->of_node, "clock-frequency", &xclk_freq);
-        if (ret) {
-                dev_err(dev, "could not get ‘clock-frequency’ \n");
-                return ret;
-        }
- 
-        /* update clock-rate as expected */
-        ret = clk_set_rate(sensor->xclk, xclk_freq);
-        if (ret) {
-                dev_err(dev, "could not set xclk frequency\n");
-                return ret;
-        }
-#endif
 	sensor->clk_freq = clk_get_rate(sensor->xclk);
 	if (sensor->clk_freq < 6000000 || sensor->clk_freq > 27000000) {
 		dev_err(dev, "Only 6Mhz-27Mhz clock range supported. provide %d Hz\n",
@@ -1661,7 +1590,7 @@ static int vd55g0_probe(struct i2c_client *client)
 		goto entity_cleanup;
 	}
 
-	ret = regulator_bulk_enable(VD55GO_NUM_SUPPLIES, sensor->supplies);
+	ret = regulator_bulk_enable(VD55G0_NUM_SUPPLIES, sensor->supplies);
 	if (ret) {
 		dev_err(&client->dev, "failed to enable regulators %d", ret);
 		goto entity_cleanup;
@@ -1709,7 +1638,6 @@ static int vd55g0_probe(struct i2c_client *client)
 		goto disable_clock;
 	}
 
-
 	ret = v4l2_async_register_subdev(&sensor->sd);
 	if (ret) {
 		dev_err(&client->dev, "async subdev register failed %d", ret);
@@ -1723,7 +1651,7 @@ static int vd55g0_probe(struct i2c_client *client)
 disable_clock:
 	clk_disable_unprepare(sensor->xclk);
 disable_bulk:
-	regulator_bulk_disable(VD55GO_NUM_SUPPLIES, sensor->supplies);
+	regulator_bulk_disable(VD55G0_NUM_SUPPLIES, sensor->supplies);
 entity_cleanup:
 	mutex_destroy(&sensor->lock);
 	media_entity_cleanup(&sensor->sd.entity);
@@ -1739,7 +1667,7 @@ static int vd55g0_remove(struct i2c_client *client)
 	clk_disable_unprepare(sensor->xclk);
 	mutex_destroy(&sensor->lock);
 	media_entity_cleanup(&sensor->sd.entity);
-	regulator_bulk_disable(VD55GO_NUM_SUPPLIES, sensor->supplies);
+	regulator_bulk_disable(VD55G0_NUM_SUPPLIES, sensor->supplies);
 
 	return 0;
 }
@@ -1763,5 +1691,5 @@ module_i2c_driver(vd55g0_i2c_driver);
 
 MODULE_AUTHOR("Mickael Guene <mickael.guene@st.com>");
 MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@st.com>");
-MODULE_DESCRIPTION("vd55g0 based FoXy Camera Subdev Driver");
+MODULE_DESCRIPTION("vd55g0 Camera Subdev Driver");
 MODULE_LICENSE("GPL v2");
