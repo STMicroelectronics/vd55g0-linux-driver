@@ -47,7 +47,7 @@
 #define DEVICE_OIF_CTRL					0x030c
 #define DEVICE_OIF_IMG_CTRL				0x030f
 #define DEVICE_OIF_ISL_CTRL				0x0310
-#define DEVICE_OIF_CSI_BITRATE				0x0224  //Changed from Statics to sensor settings 
+#define DEVICE_CLK_PLL_MIPI				0x0224
 #define DEVICE_ISL_ENABLE				0x0329
 #define DEVICE_PATGEN_CTRL				0x0400
 #define DEVICE_EXP_MODE					0x044c
@@ -213,30 +213,6 @@ static u8 get_datatype_by_code(__u32 code)
 	return 0x2a;
 }
 
-static void compute_pll_parameters_by_freq(u32 freq, unsigned int *prediv,
-					   unsigned int *mult)
-{
-	const unsigned int predivs[] = {1, 2, 4};
-	int i;
-
-	/*
-	 * freq range is [6Mhz-27Mhz] already checked.
-	 * output of divider should be in [6Mhz-12Mhz[.
-	 */
-	for (i = 0; i < ARRAY_SIZE(predivs); i++) {
-		*prediv = predivs[i];
-		if (freq / *prediv < 12000000)
-			break;
-	}
-	BUG_ON(i == ARRAY_SIZE(predivs));
-
-	/*
-	 * target freq is 804Mhz. Don't change this as it will impact image
-	 * quality.
-	 */
-	*mult = (804000000U * (*prediv) + freq / 2) / freq;
-}
-
 static s32 get_pixel_rate(struct vd55g0_dev *sensor)
 {
 	return div64_u64((u64)sensor->data_rate_in_mbps * sensor->nb_of_lane,
@@ -298,6 +274,23 @@ static int vd55g0_read_reg16(struct vd55g0_dev *sensor, u16 reg, u16 *val)
 	if (ret)
 		return ret;
 	*val = ((u16)hi << 8) | (u16)lo;
+
+	return 0;
+}
+
+__attribute__((unused))
+static int vd55g0_read_reg32(struct vd55g0_dev *sensor, u16 reg, u32 *val)
+{
+	u16 hi, lo;
+	int ret;
+
+	ret = vd55g0_read_reg16(sensor, reg, &lo);
+	if (ret)
+		return ret;
+	ret = vd55g0_read_reg16(sensor, reg + 2, &hi);
+	if (ret)
+		return ret;
+	*val = ((u32)hi << 16) | (u32)lo;
 
 	return 0;
 }
@@ -1041,13 +1034,10 @@ static int vd55g0_boot(struct vd55g0_dev *sensor)
 static int vd55g0_configure(struct vd55g0_dev *sensor)
 {
 	struct i2c_client *client = sensor->i2c_client;
-	unsigned int prediv;
-	unsigned int mult;
+	u32 mipi_bps = link_freq[0] * 2;
 	unsigned int i;
 	int ret;
-	u16 oif_ctrl = 0;
 
-	compute_pll_parameters_by_freq(sensor->clk_freq, &prediv, &mult);
 	/* cache line_length value */
 	ret = vd55g0_read_reg16(sensor, DEVICE_LINE_LENGTH,
 				&sensor->line_length);
@@ -1055,29 +1045,18 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 		return ret;
 	/* configure clocks */
 	ret = vd55g0_write_reg32(sensor, DEVICE_EXT_CLOCK, sensor->clk_freq);
-#if 0
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, DEVICE_CLK_PLL_PREDIV, prediv);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, DEVICE_CLK_SYS_PLL_MULT, mult);
-	if (ret)
-		return ret;
-	/* configure interface */
-	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, sensor->oif_ctrl);
-#endif
-#if 0
-	oif_ctrl |= 1 << 3;
-	oif_ctrl |= 1 << 6;
-	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, oif_ctrl);
-#endif
+	/* Contrary to the fox, PLL_PREDIV and PLL_MULT are not accessible. We
+	 * rely on the firmware to set the correct multiplier for the clock.
+	 * Hence we don't do anything more here.
+	 */
 	/* configure interface */
 	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, sensor->oif_ctrl);
 	if (ret)
 		return ret;
-	dev_dbg(&client->dev, "oif_ctrl_updatedv = 0x%x prev = 0x%x", oif_ctrl, sensor->oif_ctrl);
-	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CSI_BITRATE, 804);
+	ret = vd55g0_write_reg32(sensor, DEVICE_CLK_PLL_MIPI, mipi_bps);
+	if (ret)
+		return ret;
+	ret = vd55g0_write_reg(sensor, DEVICE_ISL_ENABLE, 0);
 	if (ret)
 		return ret;
 	/* use auto expo by default */
@@ -1091,7 +1070,7 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 			return ret;
 	}
 
-	sensor->data_rate_in_mbps = (mult * sensor->clk_freq) / prediv;
+	sensor->data_rate_in_mbps = mipi_bps;
 	sensor->pclk = (sensor->data_rate_in_mbps * 2) / 10;
 	dev_info(&client->dev, "data rate = %d mbps",
 		 sensor->data_rate_in_mbps);
