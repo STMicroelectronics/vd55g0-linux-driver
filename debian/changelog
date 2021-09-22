@@ -1,0 +1,5 @@
+st-vd55g0-dkms (0.1-1) unstable; urgency=medium
+
+  * Initial debian packaging
+
+ -- Benjamin Mugnier <benjamin.mugnier@st.com>  Wed, 22 Sep 2021 15:29:00 +0200
