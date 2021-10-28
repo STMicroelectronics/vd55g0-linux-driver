@@ -1,5 +1,11 @@
+st-vd55g0-dkms (0.2-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Benjamin Mugnier <benjamin.mugnier@st.com>  Thu, 28 Oct 2021 14:30:33 +0200
+
 st-vd55g0-dkms (0.1-1) unstable; urgency=medium
 
-  * Initial debian packaging
+  * initial debian packaging
 
- -- Benjamin Mugnier <benjamin.mugnier@st.com>  Wed, 22 Sep 2021 15:29:00 +0200
+ -- benjamin mugnier <benjamin.mugnier@st.com>  wed, 22 sep 2021 15:29:00 +0200
