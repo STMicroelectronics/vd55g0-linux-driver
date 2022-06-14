@@ -55,20 +55,20 @@ pipeline {
 				script {
 					if (env.GIT_BRANCH == 'debian') {
 						rtUpload (
-							serverId: 'releases-artifactory-citools-st-com',
+							serverId: 'artifactory-azure',
 							spec: '''{ "files": [ {
 									"pattern": "../st-vd55g0*.deb",
 									"target":
-									"imgappswlinux-codex-st-com/drivers/st-vd55g0/debian/"
+									"imgswlinux-releases-imgappswlinux-codex-st-com/drivers/st-vd55g0/debian/"
 								} ] }'''
 						)
 					} else {
 						rtUpload (
-							serverId: 'snapshots-artifactory-citools-st-com',
+							serverId: 'artifactory-azure',
 							spec: '''{ "files": [ {
 									"pattern": "../st-vd55g0*.deb",
 									"target":
-									"snapshots-imgappswlinux-codex-st-com/drivers/st-vd55g0/debian/"
+									"imgswlinux-snapshots-imgappswlinux-codex-st-com/drivers/st-vd55g0/debian/"
 								} ] }'''
 						)
 					}
