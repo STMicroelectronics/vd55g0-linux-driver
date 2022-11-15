@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Driver for VD55G0 global shutter sensor
+ * Driver for VD55G0 global shutter sensor family driver
  *
- * Copyright (C) STMicroelectronics SA 2019
- * Authors: Mickael Guene <mickael.guene@st.com>
- *          for STMicroelectronics.
- *
+ * Copyright (C) 2022 STMicroelectronics SA
  */
 
 #include <linux/clk.h>
@@ -1687,7 +1684,7 @@ static struct i2c_driver vd55g0_i2c_driver = {
 
 module_i2c_driver(vd55g0_i2c_driver);
 
-MODULE_AUTHOR("Mickael Guene <mickael.guene@st.com>");
 MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@st.com>");
-MODULE_DESCRIPTION("vd55g0 Camera Subdev Driver");
+MODULE_AUTHOR("Mickael Guene <mickael.guene@st.com>");
+MODULE_DESCRIPTION("VD55G0 camera subdev driver");
 MODULE_LICENSE("GPL v2");
