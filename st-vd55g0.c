@@ -5,6 +5,8 @@
  * Copyright (C) 2022 STMicroelectronics SA
  */
 
+#include <linux/version.h>
+
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -17,62 +19,64 @@
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 
-#include <linux/version.h>
+#define VD55G0_REG_8BIT(n)				((1 << 16) | (n))
+#define VD55G0_REG_16BIT(n)				((2 << 16) | (n))
+#define VD55G0_REG_32BIT(n)				((4 << 16) | (n))
+#define VD55G0_REG_SIZE_SHIFT				16
+#define VD55G0_REG_ADDR_MASK				0xffff
 
-#define WRITE_MULTIPLE_CHUNK_MAX			16
-
-#define DEVICE_MODEL_ID_REG				0x0000
+#define VD55G0_REG_MODEL_ID				0x0000
 #define VD55G0_MODEL_ID					0x4730
-#define DEVICE_FWPATCH_REVISION				0x0022
-#define DEVICE_SYSTEM_FSM				0x002c
-#define SENSOR_READY_TO_BOOT				0x01
-#define SENSOR_SW_STBY					0x02
-#define SENSOR_STREAMING				0x03
-#define DEVICE_TEMPERATURE				0x004c
-#define DEVICE_BOOT					0x0200
-#define CMD_BOOT					1
-#define CMD_PATCH_SETUP					2
-#define DEVICE_SW_STBY					0x0201
-#define CMD_START_STREAM				1
-#define CMD_THSENS_READ					4
-#define DEVICE_STREAMING				0x0202
-#define CMD_STOP_STREAM					1
-#define DEVICE_EXT_CLOCK				0x0220
-#define DEVICE_LINE_LENGTH				0x0300
-#define DEVICE_ORIENTATION				0x0302
-#define DEVICE_FORMAT_CTRL				0x030a
-#define DEVICE_OIF_CTRL					0x030c
-#define DEVICE_OIF_IMG_CTRL				0x030f
-#define DEVICE_OIF_ISL_CTRL				0x0310
-#define DEVICE_CLK_PLL_MIPI				0x0224
-#define DEVICE_ISL_ENABLE				0x0329
-#define DEVICE_PATGEN_CTRL				0x0400
-#define DEVICE_EXP_MODE					0x044c
-#define DEVICE_MANUAL_ANALOG_GAIN			0x044d
-#define DEVICE_MANUAL_COARSE_EXPOSURE			0x044e
-#define DEVICE_MANUAL_DIGITAL_GAIN			0x0450
-#define EXP_MODE_AUTO					0
-#define EXP_MODE_FREEZE					1
-#define EXP_MODE_MANUAL					2
-#define DEVICE_FRAME_LENGTH				0x0458
-#define DEVICE_ROI_X_START				0x045e
-#define DEVICE_ROI_X_END				0x0460
-#define DEVICE_ROI_Y_START				0x0462
-#define DEVICE_ROI_Y_END				0x0464
-#define DEVICE_GPIO_0_CTRL				0x0467
-#define DEVICE_GPIO_1_CTRL				0x0468
-#define DEVICE_GPIO_2_CTRL				0x0469
-#define DEVICE_GPIO_3_CTRL				0x046a
-#define DEVICE_READOUT_CTRL				0x047a
+#define VD55G0_REG_FWPATCH_REVISION			0x0022
+#define VD55G0_REG_SYSTEM_FSM				0x002c
+#define VD55G0_SYSTEM_FSM_READY_TO_BOOT			0x01
+#define VD55G0_SYSTEM_FSM_SW_STBY			0x02
+#define VD55G0_SYSTEM_FSM_STREAMING			0x03
+#define VD55G0_REG_TEMPERATURE				0x004c
+#define VD55G0_REG_BOOT					0x0200
+#define VD55G0_BOOT_BOOT				1
+#define VD55G0_BOOT_PATCH_SETUP				2
+#define VD55G0_REG_SW_STBY				0x0201
+#define VD55G0_SW_STBY_START_STREAM			1
+#define VD55G0_SW_STBY_THSENS_READ			4
+#define VD55G0_REG_STREAMING				0x0202
+#define VD55G0_STREAMING_STOP_STREAM			1
+#define VD55G0_REG_EXT_CLOCK				0x0220
+#define VD55G0_REG_LINE_LENGTH				0x0300
+#define VD55G0_REG_ORIENTATION				0x0302
+#define VD55G0_REG_FORMAT_CTRL				0x030a
+#define VD55G0_REG_OIF_CTRL				0x030c
+#define VD55G0_REG_OIF_IMG_CTRL				0x030f
+#define VD55G0_REG_OIF_ISL_CTRL				0x0310
+#define VD55G0_REG_CLK_PLL_MIPI				0x0224
+#define VD55G0_REG_ISL_ENABLE				0x0329
+#define VD55G0_REG_PATGEN_CTRL				0x0400
+#define VD55G0_REG_MANUAL_ANALOG_GAIN			0x044d
+#define VD55G0_REG_MANUAL_COARSE_EXPOSURE		0x044e
+#define VD55G0_REG_MANUAL_DIGITAL_GAIN			0x0450
+#define VD55G0_REG_EXP_MODE				0x044c
+#define VD55G0_EXP_MODE_AUTO				0
+#define VD55G0_EXP_MODE_FREEZE				1
+#define VD55G0_EXP_MODE_MANUAL				2
+#define VD55G0_REG_FRAME_LENGTH				0x0458
+#define VD55G0_REG_ROI_X_START				0x045e
+#define VD55G0_REG_ROI_X_END				0x0460
+#define VD55G0_REG_ROI_Y_START				0x0462
+#define VD55G0_REG_ROI_Y_END				0x0464
+#define VD55G0_REG_GPIO_0_CTRL				0x0467
+#define VD55G0_REG_GPIO_1_CTRL				0x0468
+#define VD55G0_REG_GPIO_2_CTRL				0x0469
+#define VD55G0_REG_GPIO_3_CTRL				0x046a
+#define VD55G0_REG_READOUT_CTRL				0x047a
 
-#define SENSOR_WIDTH					644
-#define SENSOR_HEIGHT					604
+#define VD55G0_WIDTH					644
+#define VD55G0_HEIGHT					604
+#define VD55G0_WRITE_MULTIPLE_CHUNK_MAX			16
 
 #define V4L2_CID_GPIO0_MODE			(V4L2_CID_USER_BASE | 0x1010)
 #define V4L2_CID_GPIO1_MODE			(V4L2_CID_USER_BASE | 0x1011)
 #define V4L2_CID_GPIO2_MODE			(V4L2_CID_USER_BASE | 0x1012)
 #define V4L2_CID_GPIO3_MODE			(V4L2_CID_USER_BASE | 0x1013)
-
 #define V4L2_CID_TEMPERATURE			(V4L2_CID_USER_BASE | 0x1020)
 
 #include "st-vd55g0_patch.c"
@@ -217,13 +221,13 @@ static s32 get_pixel_rate(struct vd55g0_dev *sensor)
 
 static int get_chunk_size(struct vd55g0_dev *sensor)
 {
-	int max_write_len = WRITE_MULTIPLE_CHUNK_MAX;
+	int max_write_len = VD55G0_WRITE_MULTIPLE_CHUNK_MAX;
 	struct i2c_adapter *adapter = sensor->i2c_client->adapter;
 
 	if (adapter->quirks && adapter->quirks->max_write_len)
 		max_write_len = adapter->quirks->max_write_len - 2;
 
-	max_write_len = min(max_write_len, WRITE_MULTIPLE_CHUNK_MAX);
+	max_write_len = min(max_write_len, VD55G0_WRITE_MULTIPLE_CHUNK_MAX);
 
 	return max(max_write_len, 1);
 }
@@ -344,11 +348,11 @@ static int vd55g0_write_multiple(struct vd55g0_dev *sensor, u16 reg,
 {
 	struct i2c_client *client = sensor->i2c_client;
 	struct i2c_msg msg;
-	u8 buf[WRITE_MULTIPLE_CHUNK_MAX + 2];
+	u8 buf[VD55G0_WRITE_MULTIPLE_CHUNK_MAX + 2];
 	int i;
 	int ret;
 
-	if (len > WRITE_MULTIPLE_CHUNK_MAX)
+	if (len > VD55G0_WRITE_MULTIPLE_CHUNK_MAX)
 		return -EINVAL;
 	buf[0] = reg >> 8;
 	buf[1] = reg & 0xff;
@@ -417,7 +421,7 @@ static int vd55g0_poll_reg(struct vd55g0_dev *sensor, u16 reg, u8 poll_val)
 
 static int vd55g0_wait_state(struct vd55g0_dev *sensor, int state)
 {
-	return vd55g0_poll_reg(sensor, DEVICE_SYSTEM_FSM, state);
+	return vd55g0_poll_reg(sensor, VD55G0_REG_SYSTEM_FSM, state);
 }
 
 static int vd55g0_get_regulators(struct vd55g0_dev *sensor)
@@ -454,7 +458,7 @@ static int apply_exposure(struct vd55g0_dev *sensor)
 	int expo_ms = sensor->manual_expo_ms;
 
 	dev_dbg(&client->dev, "%s request expo %d ms", __func__, expo_ms);
-	ret = vd55g0_read_reg16(sensor, DEVICE_FRAME_LENGTH, &frame_length);
+	ret = vd55g0_read_reg16(sensor, VD55G0_REG_FRAME_LENGTH, &frame_length);
 	if (ret)
 		return ret;
 	line_duration_ns = div64_u64((u64)sensor->line_length * 1000000000,
@@ -466,7 +470,7 @@ static int apply_exposure(struct vd55g0_dev *sensor)
 		expo_line_nb = max(1, expo_line_nb);
 	} while (!is_expo_valid(sensor, frame_length, expo_line_nb, &expo_ms));
 
-	ret = vd55g0_write_reg16(sensor, DEVICE_MANUAL_COARSE_EXPOSURE,
+	ret = vd55g0_write_reg16(sensor, VD55G0_REG_MANUAL_COARSE_EXPOSURE,
 				 expo_line_nb);
 	if (ret)
 		return ret;
@@ -486,7 +490,7 @@ static int vd55g0_update_patgen(struct vd55g0_dev *sensor, u32 index)
 	if (index)
 		reg |= 1;
 
-	return vd55g0_write_reg16(sensor, DEVICE_PATGEN_CTRL, reg);
+	return vd55g0_write_reg16(sensor, VD55G0_REG_PATGEN_CTRL, reg);
 }
 
 static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
@@ -500,12 +504,13 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 
 	switch (index) {
 	case V4L2_EXPOSURE_AUTO:
-		ret = vd55g0_write_reg(sensor, DEVICE_EXP_MODE, EXP_MODE_AUTO);
+		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
+				       VD55G0_EXP_MODE_AUTO);
 		sensor->expo_state = VD55G0_EXPO_AUTO;
 		break;
 	case V4L2_EXPOSURE_MANUAL:
-		ret = vd55g0_write_reg(sensor, DEVICE_EXP_MODE,
-				       EXP_MODE_MANUAL);
+		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
+				       VD55G0_EXP_MODE_MANUAL);
 		sensor->expo_state = VD55G0_EXPO_MANUAL;
 		break;
 	default:
@@ -525,8 +530,9 @@ static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, u32 is_lock)
 	if (sensor->expo_state == VD55G0_EXPO_MANUAL)
 		return -EINVAL;
 
-	return vd55g0_write_reg(sensor, DEVICE_EXP_MODE,
-				is_lock ? EXP_MODE_FREEZE : EXP_MODE_AUTO);
+	return vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
+				is_lock ? VD55G0_EXP_MODE_FREEZE :
+				VD55G0_EXP_MODE_AUTO);
 }
 
 static int vd55g0_update_gpiox_strobe_mode(struct vd55g0_dev *sensor, u32 mode,
@@ -534,7 +540,8 @@ static int vd55g0_update_gpiox_strobe_mode(struct vd55g0_dev *sensor, u32 mode,
 {
 	u8 regs[ARRAY_SIZE(vd55g0_gpios_modes)] = {0x01, 0x02, 0x22};
 
-	return vd55g0_write_reg(sensor, DEVICE_GPIO_0_CTRL + idx, regs[mode]);
+	return vd55g0_write_reg(sensor, VD55G0_REG_GPIO_0_CTRL + idx,
+				regs[mode]);
 }
 
 static int vd55g0_get_temp_stream_enable(struct vd55g0_dev *sensor, int *temp)
@@ -542,7 +549,7 @@ static int vd55g0_get_temp_stream_enable(struct vd55g0_dev *sensor, int *temp)
 	int ret;
 	int16_t temperature;
 
-	ret = vd55g0_read_reg16(sensor, DEVICE_TEMPERATURE,
+	ret = vd55g0_read_reg16(sensor, VD55G0_REG_TEMPERATURE,
 				(u16 *) &temperature);
 	if (ret)
 		return ret;
@@ -558,10 +565,11 @@ static int vd55g0_get_temp_stream_disable(struct vd55g0_dev *sensor, int *temp)
 	int ret;
 
 	/* request temperature read */
-	ret = vd55g0_write_reg(sensor, DEVICE_SW_STBY, CMD_THSENS_READ);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_SW_STBY,
+			       VD55G0_SW_STBY_THSENS_READ);
 	if (ret)
 		return ret;
-	ret = vd55g0_poll_reg(sensor, DEVICE_SW_STBY, 0);
+	ret = vd55g0_poll_reg(sensor, VD55G0_REG_SW_STBY, 0);
 	if (ret)
 		return ret;
 
@@ -597,10 +605,10 @@ static int vd55g0_update_gains(struct vd55g0_dev *sensor, u32 target)
 		       analog_gains[idx];
 
 	/* applied gains */
-	ret = vd55g0_write_reg(sensor, DEVICE_MANUAL_ANALOG_GAIN, idx);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_ANALOG_GAIN, idx);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg16(sensor, DEVICE_MANUAL_DIGITAL_GAIN,
+	ret = vd55g0_write_reg16(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
 				 digital_gain);
 	if (ret)
 		return ret;
@@ -639,11 +647,11 @@ static int vd55g0_detect(struct vd55g0_dev *sensor)
 	u16 id = 0;
 	int ret;
 
-	ret = vd55g0_wait_state(sensor, SENSOR_READY_TO_BOOT);
+	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_READY_TO_BOOT);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_read_reg16(sensor, DEVICE_MODEL_ID_REG, &id);
+	ret = vd55g0_read_reg16(sensor, VD55G0_REG_MODEL_ID, &id);
 	if (ret)
 		return ret;
 
@@ -704,13 +712,14 @@ static int set_frame_rate(struct vd55g0_dev *sensor)
 	frame_length = sensor->pclk /
 		(sensor->line_length * sensor->frame_interval.denominator);
 
-	return vd55g0_write_reg16(sensor, DEVICE_FRAME_LENGTH, frame_length);
+	return vd55g0_write_reg16(sensor, VD55G0_REG_FRAME_LENGTH,
+				  frame_length);
 }
 
 static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 {
-	int center_x = SENSOR_WIDTH / 2;
-	int center_y = SENSOR_HEIGHT / 2;
+	int center_x = VD55G0_WIDTH / 2;
+	int center_y = VD55G0_HEIGHT / 2;
 	int is_isl = sensor->current_mode->is_isl;
 	int scale = 1 << sensor->current_mode->bin_mode;
 	int width = sensor->current_mode->width * scale;
@@ -721,39 +730,39 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 		height -= 2 *scale;
 
 	/* configure output mode */
-	ret = vd55g0_write_reg(sensor, DEVICE_FORMAT_CTRL,
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_FORMAT_CTRL,
 			       get_bpp_by_code(sensor->fmt.code));
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg(sensor, DEVICE_OIF_IMG_CTRL,
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_OIF_IMG_CTRL,
 			       get_datatype_by_code(sensor->fmt.code));
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg(sensor, DEVICE_OIF_ISL_CTRL, is_isl ?
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_OIF_ISL_CTRL, is_isl ?
 			       get_datatype_by_code(sensor->fmt.code) :
 			       0x12);
-	ret = vd55g0_write_reg(sensor, DEVICE_ISL_ENABLE, is_isl);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_ISL_ENABLE, is_isl);
 	if (ret)
 		return ret;
 
 	/* configure size and bin mode */
-	ret = vd55g0_write_reg(sensor, DEVICE_READOUT_CTRL,
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_READOUT_CTRL,
 			       sensor->current_mode->bin_mode);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg16(sensor, DEVICE_ROI_X_START,
+	ret = vd55g0_write_reg16(sensor, VD55G0_REG_ROI_X_START,
 				 center_x - width / 2);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg16(sensor, DEVICE_ROI_X_END,
+	ret = vd55g0_write_reg16(sensor, VD55G0_REG_ROI_X_END,
 				 center_x + width / 2 - 1);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg16(sensor, DEVICE_ROI_Y_START,
+	ret = vd55g0_write_reg16(sensor, VD55G0_REG_ROI_Y_START,
 				 center_y - height / 2);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg16(sensor, DEVICE_ROI_Y_END,
+	ret = vd55g0_write_reg16(sensor, VD55G0_REG_ROI_Y_END,
 				 center_y + height / 2 - 1);
 	if (ret)
 		return ret;
@@ -769,15 +778,16 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 		return ret;
 
 	/* start streaming */
-	ret = vd55g0_write_reg(sensor, DEVICE_SW_STBY, CMD_START_STREAM);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_SW_STBY,
+			       VD55G0_SW_STBY_START_STREAM);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_poll_reg(sensor, DEVICE_SW_STBY, 0);
+	ret = vd55g0_poll_reg(sensor, VD55G0_REG_SW_STBY, 0);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_wait_state(sensor, SENSOR_STREAMING);
+	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_STREAMING);
 	if (ret)
 		return ret;
 
@@ -788,15 +798,16 @@ static int vd55g0_stream_disable(struct vd55g0_dev *sensor)
 {
 	int ret;
 
-	ret = vd55g0_write_reg(sensor, DEVICE_STREAMING, CMD_STOP_STREAM);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_STREAMING,
+			       VD55G0_STREAMING_STOP_STREAM);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_poll_reg(sensor, DEVICE_STREAMING, 0);
+	ret = vd55g0_poll_reg(sensor, VD55G0_REG_STREAMING, 0);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_wait_state(sensor, SENSOR_SW_STBY);
+	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_SW_STBY);
 	if (ret)
 		return ret;
 
@@ -965,23 +976,24 @@ static int vd55g0_patch(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	ret = vd55g0_write_reg(sensor, DEVICE_BOOT, CMD_PATCH_SETUP);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_BOOT,
+			       VD55G0_BOOT_PATCH_SETUP);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_poll_reg(sensor, DEVICE_BOOT, 0);
+	ret = vd55g0_poll_reg(sensor, VD55G0_REG_BOOT, 0);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_read_reg16(sensor, DEVICE_FWPATCH_REVISION, &patch);
+	ret = vd55g0_read_reg16(sensor, VD55G0_REG_FWPATCH_REVISION, &patch);
 	if (ret)
 		return ret;
 
-	if (patch != (DEVICE_FWPATCH_REVISION_MAJOR << 8) +
-	    DEVICE_FWPATCH_REVISION_MINOR) {
+	if (patch != (VD55G0_FWPATCH_REVISION_MAJOR << 8) +
+	    VD55G0_FWPATCH_REVISION_MINOR) {
 		dev_err(&client->dev, "bad patch version expected %d.%d got %d.%d",
-			DEVICE_FWPATCH_REVISION_MAJOR,
-			DEVICE_FWPATCH_REVISION_MINOR,
+			VD55G0_FWPATCH_REVISION_MAJOR,
+			VD55G0_FWPATCH_REVISION_MINOR,
 			patch >> 8, patch & 0xff);
 		return -ENODEV;
 	}
@@ -995,15 +1007,15 @@ static int vd55g0_boot(struct vd55g0_dev *sensor)
 	struct i2c_client *client = sensor->i2c_client;
 	int ret;
 
-	ret = vd55g0_write_reg(sensor, DEVICE_BOOT, CMD_BOOT);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_BOOT, VD55G0_BOOT_BOOT);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_poll_reg(sensor, DEVICE_BOOT, 0);
+	ret = vd55g0_poll_reg(sensor, VD55G0_REG_BOOT, 0);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_wait_state(sensor, SENSOR_SW_STBY);
+	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_SW_STBY);
 	if (ret)
 		return ret;
 
@@ -1020,33 +1032,36 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 	int ret;
 
 	/* cache line_length value */
-	ret = vd55g0_read_reg16(sensor, DEVICE_LINE_LENGTH,
+	ret = vd55g0_read_reg16(sensor, VD55G0_REG_LINE_LENGTH,
 				&sensor->line_length);
 	if (ret)
 		return ret;
 	/* configure clocks */
-	ret = vd55g0_write_reg32(sensor, DEVICE_EXT_CLOCK, sensor->clk_freq);
+	ret = vd55g0_write_reg32(sensor, VD55G0_REG_EXT_CLOCK,
+				 sensor->clk_freq);
 	/* Contrary to the fox, PLL_PREDIV and PLL_MULT are not accessible. We
 	 * rely on the firmware to set the correct multiplier for the clock.
 	 * Hence we don't do anything more here.
 	 */
 	/* configure interface */
-	ret = vd55g0_write_reg16(sensor, DEVICE_OIF_CTRL, sensor->oif_ctrl);
+	ret = vd55g0_write_reg16(sensor, VD55G0_REG_OIF_CTRL, sensor->oif_ctrl);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg32(sensor, DEVICE_CLK_PLL_MIPI, mipi_bps);
+	ret = vd55g0_write_reg32(sensor, VD55G0_REG_CLK_PLL_MIPI, mipi_bps);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg(sensor, DEVICE_ISL_ENABLE, 0);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_ISL_ENABLE, 0);
 	if (ret)
 		return ret;
 	/* use auto expo by default */
-	ret = vd55g0_write_reg(sensor, DEVICE_EXP_MODE, EXP_MODE_AUTO);
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
+			       VD55G0_EXP_MODE_AUTO);
 	if (ret)
 		return ret;
 	/* gpios in input (disabled) by default */
 	for (i = 0; i < 8; i++) {
-		ret = vd55g0_write_reg(sensor, DEVICE_GPIO_0_CTRL + i, 0x01);
+		ret = vd55g0_write_reg(sensor, VD55G0_REG_GPIO_0_CTRL + i,
+				       0x01);
 		if (ret)
 			return ret;
 	}
@@ -1378,7 +1393,7 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 			sensor->vflip = ctrl->val;
 		if (ctrl->id == V4L2_CID_HFLIP)
 			sensor->hflip = ctrl->val;
-		ret = vd55g0_write_reg(sensor, DEVICE_ORIENTATION,
+		ret = vd55g0_write_reg(sensor, VD55G0_REG_ORIENTATION,
 				       sensor->hflip | (sensor->vflip << 1));
 		break;
 	case V4L2_CID_TEST_PATTERN:
