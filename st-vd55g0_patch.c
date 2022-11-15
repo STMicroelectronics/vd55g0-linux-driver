@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Driver for vgxy61 sensor families
+ * Driver for vd55g0 sensor familly
  *
  * Copyright (C) STMicroelectronics SA 2019
  * Authors: Mickael Guene <mickael.guene@st.com>
