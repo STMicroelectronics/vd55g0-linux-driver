@@ -108,21 +108,11 @@ static const char * const vd55g0_supply_name[] = {
 };
 
 static const s64 link_freq[] = {
+	/*
+	 * MIPI output freq is 804Mhz / 2, as it uses both rising edge and
+	 * falling edges to send data
+	 */
 	402000000ULL
-};
-
-/* macro to convert index to 8.8 fixed point gain */
-#define I2FP(i)				(u32)(8192.0 / (32 - (i)))
-/* array of possibles analog gains in 8.8 fixed point */
-static const u16 analog_gains[29] = {
-	I2FP(0), I2FP(1), I2FP(2), I2FP(3),
-	I2FP(4), I2FP(5), I2FP(6), I2FP(7),
-	I2FP(8), I2FP(9), I2FP(10), I2FP(11),
-	I2FP(12), I2FP(13), I2FP(14), I2FP(15),
-	I2FP(16), I2FP(17), I2FP(18), I2FP(19),
-	I2FP(20), I2FP(21), I2FP(22), I2FP(23),
-	I2FP(24), I2FP(25), I2FP(26), I2FP(27),
-	I2FP(28)
 };
 
 struct vd55g0_mode_info {
@@ -177,6 +167,8 @@ struct vd55g0_dev {
 	bool vflip;
 	int manual_expo_ms;
 	enum vd55g0_expo_state expo_state;
+	u16 digital_gain;
+	u8 analog_gain;
 };
 
 /* helpers */
@@ -534,41 +526,23 @@ static int vd55g0_get_temp(struct vd55g0_dev *sensor, int *temp)
 		return vd55g0_get_temp_stream_disable(sensor, temp);
 }
 
-static int vd55g0_update_gains(struct vd55g0_dev *sensor, u32 target)
+static int vd55g0_update_analog_gain(struct vd55g0_dev *sensor, u32 target)
 {
-	struct i2c_client *client = sensor->i2c_client;
-	unsigned int idx;
-	u16 digital_gain;
-	int ret;
+	sensor->analog_gain = target;
 
-	/* find smallest analog gains which is above or equal to target gain */
-	for (idx = 0; idx < ARRAY_SIZE(analog_gains); idx++) {
-		if (analog_gains[idx] >= target)
-			break;
-	}
-	if (idx == ARRAY_SIZE(analog_gains))
-		idx--;
+	if (sensor->streaming)
+		return vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_ANALOG_GAIN,
+					target, NULL);
+	return 0;
+}
 
-	/* adjust gigital gain to match target gain */
-	digital_gain = (target * 256 + analog_gains[idx] / 2) /
-		       analog_gains[idx];
+static int vd55g0_update_digital_gain(struct vd55g0_dev *sensor, u32 target)
+{
+	sensor->digital_gain = target;
 
-	/* applied gains */
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_ANALOG_GAIN, idx,
-			       NULL);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
-			       digital_gain, NULL);
-	if (ret)
-		return ret;
-
-	dev_dbg(&client->dev, "Target gain  is 0x%04x", target);
-	dev_dbg(&client->dev, "      analog is 0x%04x", analog_gains[idx]);
-	dev_dbg(&client->dev, "     digital is 0x%04x", digital_gain);
-	dev_dbg(&client->dev, "Applied gain is 0x%04x",
-		(analog_gains[idx] * digital_gain) / 256);
-
+	if (sensor->streaming)
+		return vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
+					target, NULL);
 	return 0;
 }
 
@@ -715,6 +689,16 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 		return ret;
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_END,
 				 center_y + height / 2 - 1, NULL);
+	if (ret)
+		return ret;
+
+	/* TODO move to apply_settings */
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_ANALOG_GAIN,
+			       sensor->analog_gain, NULL);
+	if (ret)
+		return ret;
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
+			       sensor->digital_gain, NULL);
 	if (ret)
 		return ret;
 
@@ -1358,8 +1342,11 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_EXPOSURE_AUTO:
 		ret = vd55g0_update_exposure_auto(sensor, ctrl->val);
 		break;
-	case V4L2_CID_GAIN:
-		ret = vd55g0_update_gains(sensor, ctrl->val);
+	case V4L2_CID_ANALOGUE_GAIN:
+		ret = vd55g0_update_analog_gain(sensor, ctrl->val);
+		break;
+	case V4L2_CID_DIGITAL_GAIN:
+		ret = vd55g0_update_digital_gain(sensor, ctrl->val);
 		break;
 	case V4L2_CID_EXPOSURE:
 		ret = vd55g0_set_exposure(sensor, ctrl->val);
@@ -1461,8 +1448,10 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	/* add V4L2_CID_EXPOSURE_AUTO */
 	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_EXPOSURE_AUTO, 1, ~0x3,
 			       V4L2_EXPOSURE_AUTO);
-	/* V4L2_CID_GAIN. This is 8.8 fixed point value */
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_GAIN, 0, 0x3fff, 1, 0x100);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN, 0, 24, 1,
+			  sensor->analog_gain);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN, 0, 0xfff, 1,
+			  sensor->digital_gain); //TODO better bounds
 	/* V4L2_CID_EXPOSURE */
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 1, 500, 1, 10);
 	/* V4L2_CID_3A_LOCK */
@@ -1499,6 +1488,9 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor = devm_kzalloc(dev, sizeof(*sensor), GFP_KERNEL);
 	if (!sensor)
 		return -ENOMEM;
+
+	sensor->analog_gain = 0;
+	sensor->digital_gain = 256;
 
 	sensor->i2c_client = client;
 	sensor->streaming = false;
