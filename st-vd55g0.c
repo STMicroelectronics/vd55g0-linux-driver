@@ -21,6 +21,17 @@
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 
+/* Backward compatibility */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 18, 0)
+#define MIPI_CSI2_DT_RAW8 	0x2a
+#define MIPI_CSI2_DT_RAW10	0x2b
+#define MIPI_CSI2_DT_RAW12	0x2c
+#define MIPI_CSI2_DT_RAW14	0x2d
+#define MIPI_CSI2_DT_RAW16	0x2e
+#else
+#include <media/mipi-csi2.h>
+#endif
+
 #define VD55G0_REG_8BIT(n)				((1 << 16) | (n))
 #define VD55G0_REG_16BIT(n)				((2 << 16) | (n))
 #define VD55G0_REG_32BIT(n)				((4 << 16) | (n))
@@ -73,6 +84,7 @@
 
 #define VD55G0_WIDTH					644
 #define VD55G0_HEIGHT					604
+#define VD55G0_DEFAULT_MODE				1
 #define VD55G0_WRITE_MULTIPLE_CHUNK_MAX			16
 #define VD55G0_TIMEOUT_MS				500
 
@@ -115,26 +127,91 @@ static const s64 link_freq[] = {
 	402000000ULL
 };
 
+enum vd55g0_bin_mode {
+	VD55G0_BIN_MODE_NORMAL,
+	VD55G0_BIN_MODE_DIGITAL_X2,
+	VD55G0_BIN_MODE_DIGITAL_X4,
+};
+
 struct vd55g0_mode_info {
 	u32 width;
 	u32 height;
-	int bin_mode;
+	enum vd55g0_bin_mode bin_mode;
+	struct v4l2_rect crop;
 	int is_isl;
 };
 
-static const u32 vd55g0_supported_codes[] = {
-	MEDIA_BUS_FMT_SGBRG8_1X8,
-	MEDIA_BUS_FMT_SGBRG10_1X10
+struct vd55g0_fmt_desc {
+	u32 code;
+	u8 bpp;
+	u8 data_type;
+};
+
+static const struct vd55g0_fmt_desc vd55g0_supported_codes[] = {
+	{
+		.code = MEDIA_BUS_FMT_Y8_1X8,
+		.bpp = 8,
+		.data_type = MIPI_CSI2_DT_RAW8,
+	},
+	{
+		.code = MEDIA_BUS_FMT_Y10_1X10,
+		.bpp = 10,
+		.data_type = MIPI_CSI2_DT_RAW10,
+	},
+	/*
+	 * The sensor is monochrome, but on some platforms such as the db410c
+	 * the media pipeline does not support Y* formats. Trick it by sending
+	 * it a bayer format instead.
+	 */
+	{
+		.code = MEDIA_BUS_FMT_SGBRG8_1X8,
+		.bpp = 8,
+		.data_type = MIPI_CSI2_DT_RAW8,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGBRG10_1X10,
+		.bpp = 10,
+		.data_type = MIPI_CSI2_DT_RAW10,
+	},
 };
 
 const int vd55g0_sensor_frame_rates[] = { 90, 60, 50, 30, 25, 15, 10, 5, 1 };
 
+//TODO ISL ?
 static const struct vd55g0_mode_info vd55g0_mode_data[] = {
-	{ 644,  606, 0, 1}, { 644,  604, 0, 0},
-	{ 640,  482, 0, 1}, { 640,  480, 0, 0},
-	{ 480,  642, 1, 1}, { 480,  640, 1, 0},
-	{ 320,  242, 1, 1}, { 320,  240, 1, 0},
-	{ 240,  320, 2, 0},
+	{
+		.width = VD55G0_WIDTH,
+		.height = VD55G0_HEIGHT,
+		.bin_mode = VD55G0_BIN_MODE_NORMAL,
+		.crop = {
+			.left = 0,
+			.top = 0,
+			.width = VD55G0_WIDTH,
+			.height = VD55G0_HEIGHT,
+		},
+	},
+	{
+		.width = 640,
+		.height = 480,
+		.bin_mode = VD55G0_BIN_MODE_NORMAL,
+		.crop = {
+			.left = 2,
+			.top = 62,
+			.width = 640,
+			.height = 480,
+		},
+	},
+	{
+		.width = 320,
+		.height = 240,
+		.bin_mode = VD55G0_BIN_MODE_DIGITAL_X2,
+		.crop = {
+			.left = 2,
+			.top = 62,
+			.width = 640,
+			.height = 480,
+		},
+	},
 };
 
 enum vd55g0_expo_state {
@@ -588,44 +665,43 @@ static int vd55g0_detect(struct vd55g0_dev *sensor)
 	return 0;
 }
 
+static void vd55g0_fill_framefmt(struct vd55g0_dev *sensor,
+				 const struct vd55g0_mode_info *mode,
+				 struct v4l2_mbus_framefmt *fmt, u32 code)
+{
+	fmt->code = code;
+	fmt->width = mode->width;
+	fmt->height = mode->height;
+	fmt->colorspace = V4L2_COLORSPACE_RAW;
+	fmt->field = V4L2_FIELD_NONE;
+	fmt->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
+	fmt->quantization = V4L2_QUANTIZATION_DEFAULT;
+	fmt->xfer_func = V4L2_XFER_FUNC_DEFAULT;
+}
+
 static int vd55g0_try_fmt_internal(struct v4l2_subdev *sd,
 				   struct v4l2_mbus_framefmt *fmt,
 				   const struct vd55g0_mode_info **new_mode)
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
-	struct i2c_client *client = sensor->i2c_client;
 	const struct vd55g0_mode_info *mode = vd55g0_mode_data;
 	unsigned int index;
-	unsigned int i;
 
-	/* select code */
 	for (index = 0; index < ARRAY_SIZE(vd55g0_supported_codes); index++) {
-		if (vd55g0_supported_codes[index] == fmt->code)
+		if (vd55g0_supported_codes[index].code == fmt->code)
 			break;
 	}
-	if (index == ARRAY_SIZE(vd55g0_supported_codes)) {
-		dev_err(&client->dev, "code %d not supported\n", fmt->code);
-		return -EINVAL;
-	}
+	if (index == ARRAY_SIZE(vd55g0_supported_codes))
+		index = 0;
 
-	/* select size */
-	for (i = 0; i < ARRAY_SIZE(vd55g0_mode_data); i++) {
-		if (mode->width == fmt->width && mode->height == fmt->height)
-			break;
-		mode++;
-	}
-	if (i == ARRAY_SIZE(vd55g0_mode_data)) {
-		dev_err(&client->dev, "size %dx%d not supported\n",
-				fmt->width, fmt->height);
-		return -EINVAL;
-	}
+	mode = v4l2_find_nearest_size(vd55g0_mode_data,
+				      ARRAY_SIZE(vd55g0_mode_data), width, height,
+				      fmt->width, fmt->height);
+	if (new_mode)
+		*new_mode = mode;
 
-	*new_mode = mode;
-	fmt->code = vd55g0_supported_codes[index];
-	fmt->width = mode->width;
-	fmt->height = mode->height;
-	fmt->colorspace = V4L2_COLORSPACE_SRGB;
-	fmt->field = V4L2_FIELD_NONE;
+	vd55g0_fill_framefmt(sensor, mode, fmt,
+			     vd55g0_supported_codes[index].code);
 
 	return 0;
 }
@@ -643,26 +719,22 @@ static int set_frame_rate(struct vd55g0_dev *sensor)
 
 static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 {
-	int center_x = VD55G0_WIDTH / 2;
-	int center_y = VD55G0_HEIGHT / 2;
+	const struct v4l2_rect *crop = &sensor->current_mode->crop;
 	int is_isl = sensor->current_mode->is_isl;
-	int scale = 1 << sensor->current_mode->bin_mode;
-	int width = sensor->current_mode->width * scale;
-	int height = sensor->current_mode->height * scale;
 	int ret;
 
-	if (is_isl)
-		height -= 2 *scale;
+	//TODO pm_runtime support goes here
 
-	/* configure output mode */
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_FORMAT_CTRL,
-			       get_bpp_by_code(sensor->fmt.code), NULL);
+	/* pm_runtime_get_sync() can return 1 as a valid return code */
+	ret = 0;
+
+	vd55g0_write_reg(sensor, VD55G0_REG_FORMAT_CTRL,
+			 get_bpp_by_code(sensor->fmt.code), &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_OIF_IMG_CTRL,
+			 get_datatype_by_code(sensor->fmt.code), &ret);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_OIF_IMG_CTRL,
-			       get_datatype_by_code(sensor->fmt.code), NULL);
-	if (ret)
-		return ret;
+
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_OIF_ISL_CTRL, is_isl ?
 			       get_datatype_by_code(sensor->fmt.code) :
 			       0x12, NULL);
@@ -670,25 +742,14 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	/* configure size and bin mode */
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_READOUT_CTRL,
-			       sensor->current_mode->bin_mode, NULL);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_START,
-				 center_x - width / 2, NULL);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_END,
-				 center_x + width / 2 - 1, NULL);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_START,
-				 center_y - height / 2, NULL);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_END,
-				 center_y + height / 2 - 1, NULL);
+	vd55g0_write_reg(sensor, VD55G0_REG_READOUT_CTRL,
+			 sensor->current_mode->bin_mode, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_START, crop->left, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_END,
+			 crop->left + crop->width - 1, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_START, crop->top, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_END,
+			 crop->top + crop->height - 1, &ret);
 	if (ret)
 		return ret;
 
@@ -1101,21 +1162,17 @@ out:
 
 /* implement v4l2_subdev_pad_ops */
 static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
-#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
 				 struct v4l2_subdev_pad_config *cfg,
 #else
 				 struct v4l2_subdev_state *sd_state,
 #endif
 				 struct v4l2_subdev_mbus_code_enum *code)
 {
-	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
-	struct i2c_client *client = sensor->i2c_client;
-
-	dev_dbg(&client->dev, "%s probe index %d", __func__, code->index);
 	if (code->index >= ARRAY_SIZE(vd55g0_supported_codes))
 		return -EINVAL;
 
-	code->code = vd55g0_supported_codes[code->index];
+	code->code = vd55g0_supported_codes[code->index].code;
 
 	return 0;
 }
@@ -1157,7 +1214,7 @@ static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 }
 
 static int vd55g0_set_fmt(struct v4l2_subdev *sd,
-#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
 			  struct v4l2_subdev_pad_config *cfg,
 #else
 			  struct v4l2_subdev_state *sd_state,
@@ -1165,16 +1222,9 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 			  struct v4l2_subdev_format *format)
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
-	struct i2c_client *client = sensor->i2c_client;
 	const struct vd55g0_mode_info *new_mode;
 	struct v4l2_mbus_framefmt *fmt;
 	int ret;
-
-	if (format->pad != 0)
-		return -EINVAL;
-
-	dev_dbg(&client->dev, "%s %dx%d", __func__, format->format.width,
-		format->format.height);
 
 	mutex_lock(&sensor->lock);
 
@@ -1183,22 +1233,24 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 		goto out;
 	}
 
-	/* find best format */
 	ret = vd55g0_try_fmt_internal(sd, &format->format, &new_mode);
 	if (ret)
 		goto out;
 
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
-#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
 		fmt = v4l2_subdev_get_try_format(sd, cfg, 0);
 #else
 		fmt = v4l2_subdev_get_try_format(sd, sd_state, 0);
 #endif
-	} else {
+		*fmt = format->format;
+	} else if (sensor->current_mode != new_mode ||
+		   sensor->fmt.code != format->format.code) {
 		fmt = &sensor->fmt;
+		*fmt = format->format;
+
 		sensor->current_mode = new_mode;
 	}
-	*fmt = format->format;
 
 out:
 	mutex_unlock(&sensor->lock);
@@ -1207,19 +1259,13 @@ out:
 }
 
 static int vd55g0_enum_frame_size(struct v4l2_subdev *sd,
-#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
 				  struct v4l2_subdev_pad_config *cfg,
 #else
 				  struct v4l2_subdev_state *sd_state,
 #endif
 				  struct v4l2_subdev_frame_size_enum *fse)
 {
-	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
-	struct i2c_client *client = sensor->i2c_client;
-
-	dev_dbg(&client->dev, "%s for index %d", __func__, fse->index);
-	if (fse->pad != 0)
-		return -EINVAL;
 	if (fse->index >= ARRAY_SIZE(vd55g0_mode_data))
 		return -EINVAL;
 
@@ -1501,6 +1547,8 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->frame_interval.denominator = 15;
 	sensor->manual_expo_ms = 10;
 	sensor->expo_state = VD55G0_EXPO_AUTO;
+
+	sensor->current_mode = &vd55g0_mode_data[VD55G0_DEFAULT_MODE];
 
 	endpoint = fwnode_graph_get_next_endpoint(
 		of_fwnode_handle(dev->of_node), NULL);
