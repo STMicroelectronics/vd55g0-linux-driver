@@ -1160,6 +1160,33 @@ out:
 	return ret;
 }
 
+static int vd55g0_get_selection(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+				 struct v4l2_subdev_pad_config *cfg,
+#else
+				struct v4l2_subdev_state *sd_state,
+#endif
+				struct v4l2_subdev_selection *sel)
+{
+	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
+
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+		sel->r = sensor->current_mode->crop;
+		return 0;
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+		sel->r.top = 0;
+		sel->r.left = 0;
+		sel->r.width = VD55G0_WIDTH;
+		sel->r.height = VD55G0_HEIGHT;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 /* implement v4l2_subdev_pad_ops */
 static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
@@ -1321,6 +1348,7 @@ static const struct v4l2_subdev_pad_ops vd55g0_pad_ops = {
 	.enum_mbus_code = vd55g0_enum_mbus_code,
 	.get_fmt = vd55g0_get_fmt,
 	.set_fmt = vd55g0_set_fmt,
+	.get_selection = vd55g0_get_selection,
 	.enum_frame_size = vd55g0_enum_frame_size,
 	.enum_frame_interval = vd55g0_enum_frame_interval,
 };
