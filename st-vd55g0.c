@@ -262,30 +262,29 @@ static inline struct v4l2_subdev *ctrl_to_sd(struct v4l2_ctrl *ctrl)
 
 static u8 get_bpp_by_code(__u32 code)
 {
-	switch (code) {
-	case MEDIA_BUS_FMT_SGBRG8_1X8:
-		return 8;
-	case MEDIA_BUS_FMT_SGBRG10_1X10:
-		return 10;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(vd55g0_supported_codes); i++) {
+		if (vd55g0_supported_codes[i].code == code)
+			return vd55g0_supported_codes[i].bpp;
 	}
-
+	/* Should never happen */
 	WARN(1, "Unsupported code %d. default to 8 bpp", code);
-
 	return 8;
 }
 
 static u8 get_datatype_by_code(__u32 code)
 {
-	switch (code) {
-	case MEDIA_BUS_FMT_SGBRG8_1X8:
-		return 0x2a;
-	case MEDIA_BUS_FMT_SGBRG10_1X10:
-		return 0x2b;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(vd55g0_supported_codes); i++) {
+		if (vd55g0_supported_codes[i].code == code)
+			return vd55g0_supported_codes[i].data_type;
 	}
-
-	WARN(1, "Unsupported code %d. default to 0x2a data type", code);
-
-	return 0x2a;
+	/* Should never happen */
+	WARN(1, "Unsupported code %d. default to MIPI_CSI2_DT_RAW8 data type",
+	     code);
+	return MIPI_CSI2_DT_RAW8;
 }
 
 static s32 get_pixel_rate(struct vd55g0_dev *sensor)
