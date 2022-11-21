@@ -1164,17 +1164,12 @@ static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 			  struct v4l2_subdev_format *format)
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
-	struct i2c_client *client = sensor->i2c_client;
 	struct v4l2_mbus_framefmt *fmt;
-
-	dev_dbg(&client->dev, "%s probe %d", __func__, format->pad);
-	if (format->pad != 0)
-		return -EINVAL;
 
 	mutex_lock(&sensor->lock);
 
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
-#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(&sensor->sd, cfg,
 						 format->pad);
 #else
@@ -1636,6 +1631,13 @@ static int vd55g0_probe(struct i2c_client *client)
 		dev_err(&client->dev, "sensor configuration failed %d", ret);
 		goto disable_clock;
 	}
+
+	vd55g0_fill_framefmt(sensor, sensor->current_mode, &sensor->fmt,
+			     VD55G0_MEDIA_BUS_FMT_DEF);
+	ret = vd55g0_update_vblank(sensor, VD55G0_FRAME_LENGTH_DEF -
+				   sensor->current_mode->crop.height);
+	if (ret)
+		goto disable_clock;
 
 	ret = vd55g0_init_controls(sensor);
 	if (ret) {
