@@ -631,7 +631,7 @@ static int vd55g0_set_exposure(struct vd55g0_dev *sensor, int expo_ms)
 	return 0;
 }
 
-static void vd55g0_apply_reset(struct vd55g0_dev *sensor)
+static int vd55g0_apply_reset(struct vd55g0_dev *sensor)
 {
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
@@ -639,18 +639,14 @@ static void vd55g0_apply_reset(struct vd55g0_dev *sensor)
 	usleep_range(5000, 10000);
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
+	return vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_READY_TO_BOOT,
+				 VD55G0_TIMEOUT_MS);
 }
 
 static int vd55g0_detect(struct vd55g0_dev *sensor)
 {
 	struct i2c_client *client = sensor->i2c_client;
 	int id = 0;
-	int ret;
-
-	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_READY_TO_BOOT,
-				VD55G0_TIMEOUT_MS);
-	if (ret)
-		return ret;
 
 	id = vd55g0_read_reg(sensor, VD55G0_REG_MODEL_ID);
 	if (id < 0)
@@ -1639,8 +1635,13 @@ static int vd55g0_probe(struct i2c_client *client)
 	mutex_init(&sensor->lock);
 
 	/* apply reset sequence */
-	if (sensor->reset_gpio)
-		vd55g0_apply_reset(sensor);
+	if (sensor->reset_gpio) {
+		ret = vd55g0_apply_reset(sensor);
+		if (ret) {
+			dev_err(&client->dev, "sensor reset failed %d\n", ret);
+			goto disable_clock;
+		}
+	}
 
 	ret = vd55g0_detect(sensor);
 	if (ret) {
