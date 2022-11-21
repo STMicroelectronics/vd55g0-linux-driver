@@ -1250,6 +1250,28 @@ out:
 	return ret;
 }
 
+static int vd55g0_init_cfg(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+			   struct v4l2_subdev_pad_config *cfg
+#else
+			   struct v4l2_subdev_state *sd_state
+#endif
+			   )
+{
+	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
+	struct v4l2_subdev_format fmt = { 0 };
+
+	vd55g0_fill_framefmt(sensor, sensor->current_mode, &fmt.format,
+			     VD55G0_MEDIA_BUS_FMT_DEF);
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+	return vd55g0_set_fmt(sd, cfg, &fmt);
+#else
+	return vd55g0_set_fmt(sd, sd_state, &fmt);
+#endif
+}
+
+
 static int vd55g0_enum_frame_size(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
 				  struct v4l2_subdev_pad_config *cfg,
@@ -1277,6 +1299,7 @@ static const struct v4l2_subdev_video_ops vd55g0_video_ops = {
 };
 
 static const struct v4l2_subdev_pad_ops vd55g0_pad_ops = {
+	.init_cfg = vd55g0_init_cfg,
 	.enum_mbus_code = vd55g0_enum_mbus_code,
 	.get_fmt = vd55g0_get_fmt,
 	.set_fmt = vd55g0_set_fmt,
