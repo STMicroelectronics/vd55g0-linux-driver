@@ -248,7 +248,6 @@ struct vd55g0_dev {
 	u8 analog_gain;
 };
 
-/* helpers */
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
 {
 	return container_of(sd, struct vd55g0_dev, sd);
@@ -1069,7 +1068,6 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 	return 0;
 }
 
-/* implement v4l2_subdev_video_ops */
 static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
@@ -1182,7 +1180,6 @@ static int vd55g0_get_selection(struct v4l2_subdev *sd,
 	return -EINVAL;
 }
 
-/* implement v4l2_subdev_pad_ops */
 static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
 				 struct v4l2_subdev_pad_config *cfg,
@@ -1358,7 +1355,6 @@ static const struct media_entity_operations vd55g0_subdev_entity_ops = {
 	.link_validate = v4l2_subdev_link_validate,
 };
 
-/* controls */
 static int vd55g0_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct v4l2_subdev *sd = ctrl_to_sd(ctrl);
@@ -1444,7 +1440,6 @@ static const struct v4l2_ctrl_ops vd55g0_ctrl_ops = {
 	.s_ctrl = vd55g0_s_ctrl,
 };
 
-/* FIXME: better add a macro here ? */
 static const struct v4l2_ctrl_config vd55g0_gpio0_ctrl = {
 	.ops		= &vd55g0_ctrl_ops,
 	.id		= V4L2_CID_GPIO0_MODE,
@@ -1500,37 +1495,29 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	v4l2_ctrl_handler_init(hdl, 16);
 	/* we can use our own mutex for the ctrl lock */
 	hdl->lock = &sensor->lock;
-	/* add flipping */
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
-	/* add pattern generator */
 	v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
 				     ARRAY_SIZE(vd55g0_test_pattern_menu) - 1,
 				     0, 0, vd55g0_test_pattern_menu);
-	/* add V4L2_CID_PIXEL_RATE */
 	ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_PIXEL_RATE, 1, INT_MAX, 1,
 				 get_pixel_rate(sensor));
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
 	ctrl = v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_LINK_FREQ,
 				      ARRAY_SIZE(link_freq) - 1, 0, link_freq);
 	ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
-	/* add V4L2_CID_EXPOSURE_AUTO */
 	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_EXPOSURE_AUTO, 1, ~0x3,
 			       V4L2_EXPOSURE_AUTO);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN, 0, 24, 1,
 			  sensor->analog_gain);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN, 0, 0xfff, 1,
 			  sensor->digital_gain); //TODO better bounds
-	/* V4L2_CID_EXPOSURE */
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 1, 500, 1, 10);
-	/* V4L2_CID_3A_LOCK */
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_3A_LOCK, 0, 7, 0, 0);
-	/* gpios stuff */
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio0_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio1_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio2_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio3_ctrl, NULL);
-	/* temperature */
 	ctrl = v4l2_ctrl_new_custom(hdl, &vd55g0_temp_ctrl, NULL);
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
 
