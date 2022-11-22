@@ -239,6 +239,8 @@ struct vd55g0_dev {
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct v4l2_ctrl *pixel_rate_ctrl;
 	struct v4l2_ctrl *vblank_ctrl;
+	struct v4l2_ctrl *vflip_ctrl;
+	struct v4l2_ctrl *hflip_ctrl;
 	bool streaming;
 	struct v4l2_mbus_framefmt fmt;
 	const struct vd55g0_mode_info *current_mode;
@@ -745,6 +747,12 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
+	ret = vd55g0_write_reg(sensor, VD55G0_REG_ORIENTATION,
+			       sensor->hflip | (sensor->vflip << 1), NULL);
+	if (ret)
+		return ret;
+
+
 	return 0;
 }
 
@@ -1090,24 +1098,22 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
-	struct i2c_client *client = sensor->i2c_client;
 	int ret = 0;
 
 	mutex_lock(&sensor->lock);
-	dev_dbg(&client->dev, "%s : requested %d / current = %d", __func__,
-		enable, sensor->streaming);
-	if (sensor->streaming == enable)
-		goto out;
 
 	ret = enable ? vd55g0_stream_enable(sensor) :
 		       vd55g0_stream_disable(sensor);
 	if (!ret)
 		sensor->streaming = enable;
 
-out:
-	dev_dbg(&client->dev, "%s current now = %d / %d", __func__,
-		sensor->streaming, ret);
 	mutex_unlock(&sensor->lock);
+
+	if (!ret) {
+		/* vflip and hflip cannot change during streaming */
+		v4l2_ctrl_grab(sensor->vflip_ctrl, enable);
+		v4l2_ctrl_grab(sensor->hflip_ctrl, enable);
+	}
 
 	return ret;
 }
@@ -1354,9 +1360,7 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 			sensor->vflip = ctrl->val;
 		if (ctrl->id == V4L2_CID_HFLIP)
 			sensor->hflip = ctrl->val;
-		ret = vd55g0_write_reg(sensor, VD55G0_REG_ORIENTATION,
-				       sensor->hflip | (sensor->vflip << 1),
-				       NULL);
+		ret = 0;
 		break;
 	case V4L2_CID_TEST_PATTERN:
 		ret = vd55g0_update_patgen(sensor, ctrl->val);
@@ -1456,8 +1460,6 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	v4l2_ctrl_handler_init(hdl, 16);
 	/* we can use our own mutex for the ctrl lock */
 	hdl->lock = &sensor->lock;
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
 	v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
 				     ARRAY_SIZE(vd55g0_test_pattern_menu) - 1,
 				     0, 0, vd55g0_test_pattern_menu);
@@ -1498,6 +1500,12 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 						sensor->vblank_min,
 						0xffff - cur_mode->crop.height,
 						1, sensor->vblank);
+	sensor->vflip_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP,
+					       0, 1, 1, sensor->vflip);
+	sensor->hflip_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP,
+					       0, 1, 1, sensor->hflip);
+	v4l2_ctrl_grab(sensor->vflip_ctrl, false);
+	v4l2_ctrl_grab(sensor->hflip_ctrl, false);
 
 	if (hdl->error) {
 		ret = hdl->error;
@@ -1535,6 +1543,8 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->frame_interval.denominator = 15;
 	sensor->manual_expo_ms = 10;
 	sensor->expo_state = VD55G0_EXPO_AUTO;
+	sensor->vflip = false;
+	sensor->hflip = false;
 
 	sensor->current_mode = &vd55g0_mode_data[VD55G0_DEFAULT_MODE];
 
