@@ -545,19 +545,30 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 	return ret;
 }
 
-static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, u32 is_lock)
+static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, struct v4l2_ctrl *ctrl)
 {
-	/* only exposure lock is supported */
-	if ((is_lock & 1) != is_lock)
-		return -EINVAL;
+	bool ae_lock = ctrl->val & V4L2_LOCK_EXPOSURE;
+	unsigned int exp_mode = ae_lock ? VD55G0_EXP_MODE_FREEZE :
+				VD55G0_EXP_MODE_AUTO;
+	int ret = 0;
 
-	/* we can't lock / unlock if we are in manual mode */
-	if (sensor->expo_state == VD55G0_EXPO_MANUAL)
-		return -EINVAL;
+	/* Only exposure lock is supported */
+	if ((ctrl->val ^ ctrl->cur.val) & V4L2_LOCK_EXPOSURE) {
+		/* We can't lock / unlock if we are in manual mode */
+		//TODO grab this control if in manual
+		if (sensor->expo_state == VD55G0_EXPO_MANUAL)
+			return -EINVAL;
 
-	return vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
-				is_lock ? VD55G0_EXP_MODE_FREEZE :
-				VD55G0_EXP_MODE_AUTO, NULL);
+		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE, exp_mode,
+				       NULL);
+		if (ret)
+			return ret;
+
+		sensor->expo_state = exp_mode;
+
+		return ret;
+	}
+	return ret;
 }
 
 static int vd55g0_update_gpiox_strobe_mode(struct vd55g0_dev *sensor, u32 mode,
@@ -1379,7 +1390,7 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		ctrl->val = sensor->manual_expo_ms;
 		break;
 	case V4L2_CID_3A_LOCK:
-		ret = vd55g0_lock_exposure(sensor, ctrl->val);
+		ret = vd55g0_lock_exposure(sensor, ctrl);
 		break;
 	case V4L2_CID_GPIO0_MODE:
 	case V4L2_CID_GPIO1_MODE:
@@ -1473,7 +1484,7 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN, 0, 0xfff, 1,
 			  sensor->digital_gain); //TODO better bounds
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 1, 500, 1, 10);
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_3A_LOCK, 0, 7, 0, 0);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_3A_LOCK, 0, 1, 0, 0);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio0_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio1_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio2_ctrl, NULL);
