@@ -235,12 +235,6 @@ static const struct vd55g0_mode_info vd55g0_mode_data[] = {
 	},
 };
 
-enum vd55g0_expo_state {
-	VD55G0_EXPO_AUTO,
-	VD55G0_EXPO_AUTO_FREEZE,
-	VD55G0_EXPO_MANUAL
-};
-
 struct vd55g0_dev {
 	struct i2c_client *i2c_client;
 	struct v4l2_subdev sd;
@@ -268,12 +262,12 @@ struct vd55g0_dev {
 	bool hflip;
 	bool vflip;
 	int manual_expo_ms;
-	enum vd55g0_expo_state expo_state;
 	u16 digital_gain;
 	u8 analog_gain;
 	u16 vblank;
 	u16 vblank_min;
 	u16 frame_length;
+	bool ae_frozen;
 };
 
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
@@ -542,23 +536,23 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 {
 	int ret;
 
-	/* VD55G0_EXPO_AUTO_FREEZE => VD55G0_EXPO_MANUAL is invalid */
-	if (sensor->expo_state == VD55G0_EXPO_AUTO_FREEZE &&
-	    index == V4L2_EXPOSURE_MANUAL)
-		return -EINVAL;
-
 	switch (index) {
 	case V4L2_EXPOSURE_AUTO:
-		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
-				       VD55G0_EXP_MODE_AUTO, NULL);
-		sensor->expo_state = VD55G0_EXPO_AUTO;
+		if (sensor->ae_frozen) {
+			ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
+					       VD55G0_EXP_MODE_FREEZE, NULL);
+		}
+		else {
+			ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
+					       VD55G0_EXP_MODE_AUTO, NULL);
+		}
 		break;
 	case V4L2_EXPOSURE_MANUAL:
 		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
 				       VD55G0_EXP_MODE_MANUAL, NULL);
-		sensor->expo_state = VD55G0_EXPO_MANUAL;
 		break;
 	default:
+		/* Should never happen */
 		ret = -EINVAL;
 	}
 
@@ -574,20 +568,15 @@ static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, struct v4l2_ctrl *ctr
 
 	/* Only exposure lock is supported */
 	if ((ctrl->val ^ ctrl->cur.val) & V4L2_LOCK_EXPOSURE) {
-		/* We can't lock / unlock if we are in manual mode */
-		//TODO grab this control if in manual
-		if (sensor->expo_state == VD55G0_EXPO_MANUAL)
-			return -EINVAL;
-
 		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE, exp_mode,
 				       NULL);
 		if (ret)
 			return ret;
 
-		sensor->expo_state = exp_mode;
-
-		return ret;
+		sensor->ae_frozen = ae_lock;
 	}
+	ctrl->val = ae_lock;
+
 	return ret;
 }
 
@@ -1603,7 +1592,6 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->frame_interval.numerator = 1;
 	sensor->frame_interval.denominator = 15;
 	sensor->manual_expo_ms = 10;
-	sensor->expo_state = VD55G0_EXPO_AUTO;
 	sensor->vflip = false;
 	sensor->hflip = false;
 
