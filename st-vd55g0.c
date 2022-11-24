@@ -76,6 +76,12 @@
 #define VD55G0_REG_ROI_X_END				VD55G0_REG_16BIT(0x0460)
 #define VD55G0_REG_ROI_Y_START				VD55G0_REG_16BIT(0x0462)
 #define VD55G0_REG_ROI_Y_END				VD55G0_REG_16BIT(0x0464)
+#define VD55G0_REG_Y_START				VD55G0_REG_16BIT(0x045a)
+#define VD55G0_REG_Y_END				VD55G0_REG_16BIT(0x045c)
+#define VD55G0_REG_AE_ROI_START_H			VD55G0_REG_16BIT(0x0436)
+#define VD55G0_REG_AE_ROI_START_V			VD55G0_REG_16BIT(0x0438)
+#define VD55G0_REG_AE_ROI_END_H				VD55G0_REG_16BIT(0x043a)
+#define VD55G0_REG_AE_ROI_END_V				VD55G0_REG_16BIT(0x043c)
 #define VD55G0_REG_GPIO_0_CTRL				VD55G0_REG_8BIT(0x0467)
 #define VD55G0_REG_GPIO_1_CTRL				VD55G0_REG_8BIT(0x0468)
 #define VD55G0_REG_GPIO_2_CTRL				VD55G0_REG_8BIT(0x0469)
@@ -781,9 +787,46 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	return 0;
 }
 
-static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
+static int vd55g0_apply_frame_format(struct vd55g0_dev *sensor)
 {
 	const struct v4l2_rect *crop = &sensor->current_mode->crop;
+	int ret = 0;
+
+	vd55g0_write_reg(sensor, VD55G0_REG_READOUT_CTRL,
+			 sensor->current_mode->bin_mode, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_START, crop->left, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_END,
+			 crop->left + crop->width - 1, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_START, crop->top, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_END,
+			 crop->top + crop->height - 1, &ret);
+
+	/*
+	 * Use the same auto exposure crop as the image crop, performing auto
+	 * exposure computation only on image boundaries.
+	 */
+	vd55g0_write_reg(sensor, VD55G0_REG_AE_ROI_START_H, crop->left, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_AE_ROI_END_H,
+			 crop->left + crop->width - 1, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_AE_ROI_START_V, crop->top, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_AE_ROI_END_V,
+			 crop->top + crop->height - 1, &ret);
+
+	/*
+	 * Only aquire lines required for this image format, optimizing power
+	 * usage
+	 */
+#if 0
+	vd55g0_write_reg(sensor, VD55G0_REG_Y_START, crop->top - 50, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_Y_END,
+			 crop->top + crop->height - 1, &ret);
+#endif
+
+	return ret;
+}
+
+static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
+{
 	int is_isl = sensor->current_mode->is_isl;
 	int ret;
 
@@ -806,14 +849,7 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	vd55g0_write_reg(sensor, VD55G0_REG_READOUT_CTRL,
-			 sensor->current_mode->bin_mode, &ret);
-	vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_START, crop->left, &ret);
-	vd55g0_write_reg(sensor, VD55G0_REG_ROI_X_END,
-			 crop->left + crop->width - 1, &ret);
-	vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_START, crop->top, &ret);
-	vd55g0_write_reg(sensor, VD55G0_REG_ROI_Y_END,
-			 crop->top + crop->height - 1, &ret);
+	ret = vd55g0_apply_frame_format(sensor);
 	if (ret)
 		return ret;
 
