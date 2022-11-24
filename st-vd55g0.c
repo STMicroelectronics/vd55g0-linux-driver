@@ -192,6 +192,17 @@ static const struct vd55g0_mode_info vd55g0_mode_data[] = {
 		},
 	},
 	{
+		.width = VD55G0_WIDTH,
+		.height = 600,
+		.bin_mode = VD55G0_BIN_MODE_NORMAL,
+		.crop = {
+			.left = 0,
+			.top = 2,
+			.width = VD55G0_WIDTH,
+			.height = 600,
+		},
+	},
+	{
 		.width = 640,
 		.height = 480,
 		.bin_mode = VD55G0_BIN_MODE_NORMAL,
