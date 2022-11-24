@@ -84,7 +84,7 @@
 
 #define VD55G0_WIDTH					644
 #define VD55G0_HEIGHT					604
-#define VD55G0_DEFAULT_MODE				1
+#define VD55G0_DEFAULT_MODE				0
 #define VD55G0_WRITE_MULTIPLE_CHUNK_MAX			16
 //TODO FRAME_LENGTH_MIN
 #define VD55G0_FRAME_LENGTH_DEF				1583 /* 90 fps */ //TODO WRONG
@@ -180,6 +180,8 @@ static const struct vd55g0_fmt_desc vd55g0_supported_codes[] = {
 
 //TODO ISL ?
 static const struct vd55g0_mode_info vd55g0_mode_data[] = {
+/* Uncomment once frame alignement bug is sorted out */
+#if 0
 	{
 		.width = VD55G0_WIDTH,
 		.height = VD55G0_HEIGHT,
@@ -202,6 +204,7 @@ static const struct vd55g0_mode_info vd55g0_mode_data[] = {
 			.height = 600,
 		},
 	},
+#endif
 	{
 		.width = 640,
 		.height = 480,
