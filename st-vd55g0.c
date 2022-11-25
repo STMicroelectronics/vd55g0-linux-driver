@@ -92,7 +92,7 @@
 #define VD55G0_HEIGHT					604
 #define VD55G0_DEFAULT_MODE				0
 #define VD55G0_WRITE_MULTIPLE_CHUNK_MAX			16
-//TODO FRAME_LENGTH_MIN
+#define VD55G0_MIN_FRAME_LENGTH				(605 + 76)
 #define VD55G0_FRAME_LENGTH_DEF				1583 /* 90 fps */ //TODO WRONG
 #define VD55G0_TIMEOUT_MS				500
 #define VD55G0_MEDIA_BUS_FMT_DEF			MEDIA_BUS_FMT_Y8_1X8
@@ -612,6 +612,8 @@ static int vd55g0_apply_framelength(struct vd55g0_dev *sensor)
 
 static int vd55g0_update_vblank(struct vd55g0_dev *sensor, u16 vblank)
 {
+	sensor->vblank_min = VD55G0_MIN_FRAME_LENGTH -
+			     sensor->current_mode->crop.height;
 	sensor->vblank = vblank;
 	sensor->frame_length = sensor->current_mode->crop.height +
 			       sensor->vblank;
