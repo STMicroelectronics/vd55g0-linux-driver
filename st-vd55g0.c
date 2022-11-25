@@ -14,6 +14,7 @@
 #include <linux/i2c.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
+#include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
@@ -689,23 +690,6 @@ static int vd55g0_apply_reset(struct vd55g0_dev *sensor)
 				 VD55G0_TIMEOUT_MS);
 }
 
-static int vd55g0_detect(struct vd55g0_dev *sensor)
-{
-	struct i2c_client *client = sensor->i2c_client;
-	int id = 0;
-
-	id = vd55g0_read_reg(sensor, VD55G0_REG_MODEL_ID);
-	if (id < 0)
-		return id;
-
-	if (id != VD55G0_MODEL_ID) {
-		dev_warn(&client->dev, "Unsupported sensor id %x", id);
-		return -ENODEV;
-	}
-
-	return 0;
-}
-
 static void vd55g0_fill_framefmt(struct vd55g0_dev *sensor,
 				 const struct vd55g0_mode_info *mode,
 				 struct v4l2_mbus_framefmt *fmt, u32 code)
@@ -818,10 +802,15 @@ static int vd55g0_apply_frame_format(struct vd55g0_dev *sensor)
 
 static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 {
+	struct i2c_client *client = v4l2_get_subdevdata(&sensor->sd);
 	int is_isl = sensor->current_mode->is_isl;
 	int ret;
 
-	//TODO pm_runtime support goes here
+	ret = pm_runtime_get_sync(&client->dev);
+	if (ret < 0) {
+		pm_runtime_put_autosuspend(&client->dev);
+		return ret;
+	}
 
 	/* pm_runtime_get_sync() can return 1 as a valid return code */
 	ret = 0;
@@ -831,59 +820,67 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 	vd55g0_write_reg(sensor, VD55G0_REG_OIF_IMG_CTRL,
 			 get_datatype_by_code(sensor->fmt.code), &ret);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_OIF_ISL_CTRL, is_isl ?
 			       get_datatype_by_code(sensor->fmt.code) :
 			       0x12, NULL);
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_ISL_ENABLE, is_isl, NULL);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = vd55g0_apply_frame_format(sensor);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = vd55g0_apply_settings(sensor);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_SW_STBY,
 			       VD55G0_SW_STBY_START_STREAM, NULL);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = vd55g0_poll_reg(sensor, VD55G0_REG_SW_STBY, 0, VD55G0_TIMEOUT_MS);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_STREAMING,
 				VD55G0_TIMEOUT_MS);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	return 0;
+
+err_rpm_put:
+	pm_runtime_put(&client->dev);
+	return ret;
 }
 
 static int vd55g0_stream_disable(struct vd55g0_dev *sensor)
 {
+	struct i2c_client *client = v4l2_get_subdevdata(&sensor->sd);
 	int ret;
 
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_STREAMING,
 			       VD55G0_STREAMING_STOP_STREAM, NULL);
 	if (ret)
-		return ret;
+		goto err_str_dis;
 
 	ret = vd55g0_poll_reg(sensor, VD55G0_REG_STREAMING, 0, 2000);
 	if (ret)
-		return ret;
+		goto err_str_dis;
 
 	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_SW_STBY,
 				VD55G0_TIMEOUT_MS);
-	if (ret)
-		return ret;
 
-	return 0;
+err_str_dis:
+	if (ret)
+		WARN(1, "Can't disable stream");
+	pm_runtime_put(&client->dev);
+
+	return ret;
 }
 
 #if KERNEL_VERSION(4, 20, 0) > LINUX_VERSION_CODE
@@ -1572,6 +1569,99 @@ free_ctrls:
 	return ret;
 }
 
+static int vd55g0_detect(struct vd55g0_dev *sensor)
+{
+	struct i2c_client *client = sensor->i2c_client;
+	int id = 0;
+
+	id = vd55g0_read_reg(sensor, VD55G0_REG_MODEL_ID);
+	if (id < 0)
+		return id;
+
+	if (id != VD55G0_MODEL_ID) {
+		dev_warn(&client->dev, "Unsupported sensor id %x", id);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+/* Power/clock management functions */
+static int vd55g0_power_on(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
+	int ret;
+
+	ret = regulator_bulk_enable(ARRAY_SIZE(vd55g0_supply_name),
+				    sensor->supplies);
+	if (ret) {
+		dev_err(&client->dev, "failed to enable regulators %d", ret);
+		return ret;
+	}
+
+	ret = clk_prepare_enable(sensor->xclk);
+	if (ret) {
+		dev_err(&client->dev, "failed to enable clock %d", ret);
+		goto disable_bulk;
+	}
+
+	if (sensor->reset_gpio) {
+		ret = vd55g0_apply_reset(sensor);
+		if (ret) {
+			dev_err(&client->dev, "sensor reset failed %d\n", ret);
+			goto disable_clock;
+		}
+	}
+
+	ret = vd55g0_detect(sensor);
+	if (ret) {
+		dev_err(&client->dev, "sensor detect failed %d", ret);
+		goto disable_clock;
+	}
+
+	ret = vd55g0_patch(sensor);
+	if (ret) {
+		dev_err(&client->dev, "sensor patch failed %d", ret);
+		goto disable_clock;
+	}
+
+	ret = vd55g0_boot(sensor);
+	if (ret) {
+		dev_err(&client->dev, "sensor boot failed %d", ret);
+		goto disable_clock;
+	}
+
+	ret = vd55g0_configure(sensor);
+	if (ret) {
+		dev_err(&client->dev, "sensor configuration failed %d", ret);
+		goto disable_clock;
+	}
+
+	return 0;
+
+disable_clock:
+	clk_disable_unprepare(sensor->xclk);
+disable_bulk:
+	regulator_bulk_disable(ARRAY_SIZE(vd55g0_supply_name),
+			       sensor->supplies);
+
+	return ret;
+}
+
+static int vd55g0_power_off(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
+
+	clk_disable_unprepare(sensor->xclk);
+	regulator_bulk_disable(ARRAY_SIZE(vd55g0_supply_name),
+			       sensor->supplies);
+	return 0;
+}
+
 static int vd55g0_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -1605,6 +1695,7 @@ static int vd55g0_probe(struct i2c_client *client)
 		dev_err(dev, "endpoint node not found\n");
 		return -EINVAL;
 	}
+
 	ret = vd55g0_rx_from_ep(sensor, endpoint);
 	fwnode_handle_put(endpoint);
 	if (ret) {
@@ -1612,7 +1703,7 @@ static int vd55g0_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	sensor->xclk = devm_clk_get(dev, "xclk");
+	sensor->xclk = devm_clk_get(dev, NULL);
 	if (IS_ERR(sensor->xclk)) {
 		dev_err(dev, "failed to get xclk\n");
 		return PTR_ERR(sensor->xclk);
@@ -1630,100 +1721,69 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->sd.entity.ops = &vd55g0_subdev_entity_ops;
 	sensor->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
 
-	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
-	if (ret) {
-		dev_err(&client->dev, "pads init failed %d", ret);
-		return ret;
-	}
-
-	/* request optional reset pin */
 	sensor->reset_gpio = devm_gpiod_get_optional(dev, "reset",
 						     GPIOD_OUT_HIGH);
+
 	ret = vd55g0_get_regulators(sensor);
 	if (ret) {
 		dev_err(&client->dev, "failed to get regulators %d", ret);
-		goto entity_cleanup;
+		return ret;
 	}
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(vd55g0_supply_name),
-				    sensor->supplies);
-	if (ret) {
-		dev_err(&client->dev, "failed to enable regulators %d", ret);
-		goto entity_cleanup;
-	}
-
-	ret = clk_prepare_enable(sensor->xclk);
-	if (ret) {
-		dev_err(&client->dev, "failed to enable clock %d", ret);
-		goto disable_bulk;
-	}
-
-	mutex_init(&sensor->lock);
-
-	/* apply reset sequence */
-	if (sensor->reset_gpio) {
-		ret = vd55g0_apply_reset(sensor);
-		if (ret) {
-			dev_err(&client->dev, "sensor reset failed %d\n", ret);
-			goto disable_clock;
-		}
-	}
-
-	ret = vd55g0_detect(sensor);
-	if (ret) {
-		dev_err(&client->dev, "sensor detect failed %d", ret);
-		goto disable_clock;
-	}
-
-	ret = vd55g0_patch(sensor);
-	if (ret) {
-		dev_err(&client->dev, "sensor patch failed %d", ret);
-		goto disable_clock;
-	}
-
-	ret = vd55g0_boot(sensor);
-	if (ret) {
-		dev_err(&client->dev, "sensor boot failed %d", ret);
-		goto disable_clock;
-	}
-
-	ret = vd55g0_configure(sensor);
-	if (ret) {
-		dev_err(&client->dev, "sensor configuration failed %d", ret);
-		goto disable_clock;
-	}
+	ret = vd55g0_power_on(dev);
+	if (ret)
+		return ret;
 
 	vd55g0_fill_framefmt(sensor, sensor->current_mode, &sensor->fmt,
 			     VD55G0_MEDIA_BUS_FMT_DEF);
+
+	mutex_init(&sensor->lock);
+
 	ret = vd55g0_update_vblank(sensor, VD55G0_FRAME_LENGTH_DEF -
 				   sensor->current_mode->crop.height);
 	if (ret)
-		goto disable_clock;
+		goto error_power_off;
 
 	ret = vd55g0_init_controls(sensor);
 	if (ret) {
 		dev_err(&client->dev, "controls initialization failed %d", ret);
-		goto disable_clock;
+		goto error_power_off;
 	}
+
+	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
+	if (ret) {
+		dev_err(&client->dev, "pads init failed %d", ret);
+		goto error_handler_free;
+	}
+
+	/* Enable runtime PM and turn off the device */
+	pm_runtime_set_active(dev);
+	pm_runtime_enable(dev);
+	pm_runtime_idle(dev);
 
 	ret = v4l2_async_register_subdev(&sensor->sd);
 	if (ret) {
 		dev_err(&client->dev, "async subdev register failed %d", ret);
-		goto disable_clock;
+		goto error_pm_runtime;
 	}
+
+	pm_runtime_set_autosuspend_delay(&client->dev, 1000);
+	pm_runtime_use_autosuspend(&client->dev);
 
 	dev_info(&client->dev, "vd55g0 probe successfully");
 
 	return 0;
 
-disable_clock:
-	clk_disable_unprepare(sensor->xclk);
-disable_bulk:
-	regulator_bulk_disable(ARRAY_SIZE(vd55g0_supply_name),
-			       sensor->supplies);
-entity_cleanup:
-	mutex_destroy(&sensor->lock);
+error_pm_runtime:
+	pm_runtime_disable(&client->dev);
+	pm_runtime_set_suspended(&client->dev);
 	media_entity_cleanup(&sensor->sd.entity);
+error_handler_free:
+	v4l2_ctrl_handler_free(sensor->sd.ctrl_handler);
+error_power_off:
+	mutex_destroy(&sensor->lock);
+	vd55g0_power_off(dev);
+
 	return ret;
 }
 
@@ -1733,11 +1793,13 @@ static int vd55g0_remove(struct i2c_client *client)
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
 
 	v4l2_async_unregister_subdev(&sensor->sd);
-	clk_disable_unprepare(sensor->xclk);
 	mutex_destroy(&sensor->lock);
 	media_entity_cleanup(&sensor->sd.entity);
-	regulator_bulk_disable(ARRAY_SIZE(vd55g0_supply_name),
-			       sensor->supplies);
+
+	pm_runtime_disable(&client->dev);
+	if (!pm_runtime_status_suspended(&client->dev))
+		vd55g0_power_off(&client->dev);
+	pm_runtime_set_suspended(&client->dev);
 
 	return 0;
 }
@@ -1748,10 +1810,15 @@ static const struct of_device_id vd55g0_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, vd55g0_dt_ids);
 
+static const struct dev_pm_ops vd55g0_pm_ops = {
+	SET_RUNTIME_PM_OPS(vd55g0_power_off, vd55g0_power_on, NULL)
+};
+
 static struct i2c_driver vd55g0_i2c_driver = {
 	.driver = {
 		.name  = "st-vd55g0",
 		.of_match_table = vd55g0_dt_ids,
+		.pm = &vd55g0_pm_ops,
 	},
 	.probe_new = vd55g0_probe,
 	.remove = vd55g0_remove,
