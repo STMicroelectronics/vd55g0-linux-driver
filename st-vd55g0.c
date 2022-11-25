@@ -476,49 +476,10 @@ static int vd55g0_get_regulators(struct vd55g0_dev *sensor)
 				       sensor->supplies);
 }
 
-static bool is_expo_valid(struct vd55g0_dev *sensor, int frame_length,
-			  int line_n, int *expo_ms)
-{
-	/* FIXME : formulae need to be updated */
-	if (line_n < frame_length - 100)
-		return true;
-
-	*expo_ms = *expo_ms - 1;
-
-	return false;
-}
-
 static int apply_exposure(struct vd55g0_dev *sensor)
 {
-	struct i2c_client *client = sensor->i2c_client;
-	int frame_length;
-	int line_duration_ns;
-	int expo_line_nb;
-	int ret;
-	int expo_ms = sensor->manual_expo_ms;
-
-	dev_dbg(&client->dev, "%s request expo %d ms", __func__, expo_ms);
-	frame_length = vd55g0_read_reg(sensor, VD55G0_REG_FRAME_LENGTH);
-	if (frame_length < 0)
-		return frame_length;
-	line_duration_ns = div64_u64((u64)sensor->line_length * 1000000000,
-				     sensor->pclk);
-
-	do {
-		expo_line_nb = (expo_ms * 1000000 + line_duration_ns / 2) /
-				    line_duration_ns;
-		expo_line_nb = max(1, expo_line_nb);
-	} while (!is_expo_valid(sensor, frame_length, expo_line_nb, &expo_ms));
-
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_COARSE_EXPOSURE,
-				 expo_line_nb, NULL);
-	if (ret)
-		return ret;
-
-	dev_dbg(&client->dev, "%s applied expo %d ms", __func__, expo_ms);
-	sensor->manual_expo_ms = expo_ms;
-
-	return 0;
+	return vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_COARSE_EXPOSURE,
+				 sensor->manual_expo_ms, NULL);
 }
 
 static int vd55g0_update_patgen(struct vd55g0_dev *sensor, u32 index)
@@ -1425,7 +1386,6 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_EXPOSURE:
 		ret = vd55g0_set_exposure(sensor, ctrl->val);
-		ctrl->val = sensor->manual_expo_ms;
 		break;
 	case V4L2_CID_3A_LOCK:
 		ret = vd55g0_lock_exposure(sensor, ctrl);
@@ -1521,7 +1481,7 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 			  sensor->analog_gain);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN, 0, 0xfff, 1,
 			  sensor->digital_gain); //TODO better bounds
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 1, 500, 1, 10);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 0, 0xffff, 1, 10);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_3A_LOCK, 0, 1, 0, 0);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio0_ctrl, NULL);
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio1_ctrl, NULL);
