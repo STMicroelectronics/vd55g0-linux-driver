@@ -238,6 +238,13 @@ static const struct vd55g0_mode_info vd55g0_mode_data[] = {
 	},
 };
 
+enum vd55g0_expo_state {
+	VD55G0_EXP_AUTO,
+	VD55G0_EXP_FREEZE,
+	VD55G0_EXP_MANUAL
+};
+
+
 struct vd55g0_dev {
 	struct i2c_client *i2c_client;
 	struct v4l2_subdev sd;
@@ -265,6 +272,7 @@ struct vd55g0_dev {
 	bool hflip;
 	bool vflip;
 	int manual_expo_ms;
+	enum vd55g0_expo_state expo_state;
 	u16 digital_gain;
 	u8 analog_gain;
 	u16 vblank;
@@ -467,6 +475,11 @@ static int vd55g0_wait_state(struct vd55g0_dev *sensor, int state,
 			       timeout_ms);
 }
 
+static int vd55g0_apply_exposure_auto(struct vd55g0_dev *sensor) {
+	return vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
+			sensor->expo_state, NULL);
+}
+
 static int vd55g0_get_regulators(struct vd55g0_dev *sensor)
 {
 	int i;
@@ -513,25 +526,22 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 
 	switch (index) {
 	case V4L2_EXPOSURE_AUTO:
-		if (sensor->ae_frozen) {
-			ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
-					       VD55G0_EXP_MODE_FREEZE, NULL);
-		}
-		else {
-			ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
-					       VD55G0_EXP_MODE_AUTO, NULL);
-		}
+		if (sensor->ae_frozen)
+			sensor->expo_state = VD55G0_EXP_FREEZE;
+		else
+			sensor->expo_state = VD55G0_EXP_AUTO;
 		break;
 	case V4L2_EXPOSURE_MANUAL:
-		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
-				       VD55G0_EXP_MODE_MANUAL, NULL);
+		sensor->expo_state = VD55G0_EXP_MANUAL;
 		break;
 	default:
 		/* Should never happen */
 		ret = -EINVAL;
 	}
 
-	return ret;
+	if (sensor->streaming)
+		return vd55g0_apply_exposure_auto(sensor);
+	return 0;
 }
 
 static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, struct v4l2_ctrl *ctrl)
@@ -711,6 +721,10 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	int ret;
 
 	ret = vd55g0_apply_framelength(sensor);
+	if (ret)
+		return ret;
+
+	ret = vd55g0_apply_exposure_auto(sensor);
 	if (ret)
 		return ret;
 
