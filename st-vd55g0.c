@@ -99,6 +99,7 @@
 #define VD55G0_HEIGHT					604
 #define VD55G0_DEFAULT_MODE				0
 #define VD55G0_WRITE_MULTIPLE_CHUNK_MAX			16
+#define VD55G0_NB_GPIOS					4
 #define VD55G0_NB_POLARITIES				3
 #define VD55G0_MIN_FRAME_LENGTH				(605 + 76)
 #define VD55G0_FRAME_LENGTH_DEF				1980 /* 60 fps */
@@ -989,7 +990,6 @@ static int vd55g0_patch(struct vd55g0_dev *sensor)
 
 static int vd55g0_boot(struct vd55g0_dev *sensor)
 {
-	struct i2c_client *client = sensor->i2c_client;
 	int ret;
 
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_BOOT, VD55G0_BOOT_BOOT, NULL);
@@ -1010,45 +1010,42 @@ static int vd55g0_boot(struct vd55g0_dev *sensor)
 
 static int vd55g0_configure(struct vd55g0_dev *sensor)
 {
-	struct i2c_client *client = sensor->i2c_client;
+	/* Double data rate */
 	u32 mipi_bps = link_freq[0] * 2;
 	unsigned int i;
 	int line_length;
-	int ret;
+	int ret = 0;
+
+	/* Frequency to data rate is 1:1 ratio for MIPI */
+	sensor->data_rate_in_mbps = mipi_bps;
+	/* Video timing ISP path (pixel clock)  requires 804/5 mhz = 160 mhz */
+	sensor->pclk = mipi_bps / 5;
 
 	line_length = vd55g0_read_reg(sensor, VD55G0_REG_LINE_LENGTH);
 	if (line_length < 0)
 		return line_length;
 	sensor->line_length = line_length;
-	/* configure clocks */
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_EXT_CLOCK,
-				 sensor->clk_freq, NULL);
-	/* Contrary to the fox, PLL_PREDIV and PLL_MULT are not accessible. We
-	 * rely on the firmware to set the correct multiplier for the clock.
-	 * Hence we don't do anything more here.
+
+	/* 
+	 * PLL_PREDIV and PLL_MULT are not accessible. We rely on the firmware
+	 * to set the correct multiplier for the clock. Hence we don't do
+	 * anything more here.
 	 */
-	/* configure interface */
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_OIF_CTRL, sensor->oif_ctrl, NULL);
+	vd55g0_write_reg(sensor, VD55G0_REG_EXT_CLOCK, sensor->clk_freq, &ret);
+
+	vd55g0_write_reg(sensor, VD55G0_REG_OIF_CTRL, sensor->oif_ctrl, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_CLK_PLL_MIPI, mipi_bps, &ret);
 	if (ret)
 		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_CLK_PLL_MIPI, mipi_bps, NULL);
-	if (ret)
-		return ret;
-	/* use auto expo by default */
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
-			       VD55G0_EXP_MODE_AUTO, NULL);
-	if (ret)
-		return ret;
-	/* gpios in input (disabled) by default */
-	for (i = 0; i < 8; i++) {
+
+	/* GPIOs in input (disabled) by default */
+	for (i = 0; i < VD55G0_NB_GPIOS; i++) {
 		ret = vd55g0_write_reg(sensor, VD55G0_REG_GPIO_0_CTRL + i,
 				       0x01, NULL);
 		if (ret)
 			return ret;
 	}
 
-	sensor->data_rate_in_mbps = mipi_bps;
-	sensor->pclk = (sensor->data_rate_in_mbps * 2) / 10;
 
 	return 0;
 }
