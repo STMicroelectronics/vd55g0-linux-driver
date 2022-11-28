@@ -476,8 +476,12 @@ static int vd55g0_wait_state(struct vd55g0_dev *sensor, int state,
 }
 
 static int vd55g0_apply_exposure_auto(struct vd55g0_dev *sensor) {
-	return vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE,
-			sensor->expo_state, NULL);
+	enum vd55g0_expo_state exp = sensor->expo_state;
+
+	if (sensor->ae_frozen && sensor->expo_state == VD55G0_EXP_AUTO)
+		exp = VD55G0_EXP_FREEZE;
+
+	return vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE, exp, NULL);
 }
 
 static int vd55g0_get_regulators(struct vd55g0_dev *sensor)
@@ -526,10 +530,7 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 
 	switch (index) {
 	case V4L2_EXPOSURE_AUTO:
-		if (sensor->ae_frozen)
-			sensor->expo_state = VD55G0_EXP_FREEZE;
-		else
-			sensor->expo_state = VD55G0_EXP_AUTO;
+		sensor->expo_state = VD55G0_EXP_AUTO;
 		break;
 	case V4L2_EXPOSURE_MANUAL:
 		sensor->expo_state = VD55G0_EXP_MANUAL;
@@ -546,24 +547,21 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 
 static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, struct v4l2_ctrl *ctrl)
 {
-	bool ae_lock = ctrl->val & V4L2_LOCK_EXPOSURE;
-	unsigned int exp_mode = ae_lock ? VD55G0_EXP_MODE_FREEZE :
-				VD55G0_EXP_MODE_AUTO;
-	int ret = 0;
-
 	/* Only exposure lock is supported */
-	if ((ctrl->val ^ ctrl->cur.val) & V4L2_LOCK_EXPOSURE) {
-		ret = vd55g0_write_reg(sensor, VD55G0_REG_EXP_MODE, exp_mode,
-				       NULL);
-		if (ret)
-			return ret;
+	bool ae_lock = ctrl->val & V4L2_LOCK_EXPOSURE;
+	int ret;
 
-		sensor->ae_frozen = ae_lock;
-	}
+	sensor->ae_frozen = ae_lock;
+
+	/* Cap control value to reflect the hardware state */
 	ctrl->val = ae_lock;
 
-	return ret;
+	ret = vd55g0_apply_exposure_auto(sensor);
+	if (ret)
+		return ret;
+	return 0;
 }
+
 
 static int vd55g0_update_gpiox_strobe_mode(struct vd55g0_dev *sensor, u32 mode,
 					   int idx)
