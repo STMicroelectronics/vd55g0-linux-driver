@@ -33,6 +33,12 @@
 #include <media/mipi-csi2.h>
 #endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+#define HZ_PER_MHZ		1000000UL
+#else
+#include <linux/units.h>
+#endif
+
 #define VD55G0_REG_8BIT(n)				((1 << 16) | (n))
 #define VD55G0_REG_16BIT(n)				((2 << 16) | (n))
 #define VD55G0_REG_32BIT(n)				((4 << 16) | (n))
@@ -1697,9 +1703,10 @@ static int vd55g0_probe(struct i2c_client *client)
 		return PTR_ERR(sensor->xclk);
 	}
 	sensor->clk_freq = clk_get_rate(sensor->xclk);
-	if (sensor->clk_freq < 6000000 || sensor->clk_freq > 27000000) {
-		dev_err(dev, "Only 6Mhz-27Mhz clock range supported. provide %d Hz\n",
-			sensor->clk_freq);
+	if (sensor->clk_freq < 6 * HZ_PER_MHZ ||
+	    sensor->clk_freq > 27 * HZ_PER_MHZ) {
+		dev_err(dev, "Only 6Mhz-27Mhz clock range supported. provide %lu MHz\n",
+			sensor->clk_freq / HZ_PER_MHZ);
 		return -EINVAL;
 	}
 
