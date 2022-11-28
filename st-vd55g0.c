@@ -273,7 +273,7 @@ struct vd55g0_dev {
 	struct v4l2_fract frame_interval;
 	bool hflip;
 	bool vflip;
-	int manual_expo_ms;
+	int manual_expo;
 	enum vd55g0_expo_state expo_state;
 	u16 digital_gain;
 	u8 analog_gain;
@@ -308,7 +308,7 @@ static u8 get_bpp_by_code(__u32 code)
 	return 8;
 }
 
-static u8 get_datatype_by_code(__u32 code)
+static u8 get_data_type_by_code(__u32 code)
 {
 	unsigned int i;
 
@@ -498,10 +498,10 @@ static int vd55g0_get_regulators(struct vd55g0_dev *sensor)
 				       sensor->supplies);
 }
 
-static int apply_exposure(struct vd55g0_dev *sensor)
+static int vd55g0_apply_exposure(struct vd55g0_dev *sensor)
 {
 	return vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_COARSE_EXPOSURE,
-				 sensor->manual_expo_ms, NULL);
+				 sensor->manual_expo, NULL);
 }
 
 static int vd55g0_apply_patgen(struct vd55g0_dev *sensor)
@@ -653,11 +653,11 @@ static int vd55g0_update_digital_gain(struct vd55g0_dev *sensor, u32 target)
 	return 0;
 }
 
-static int vd55g0_set_exposure(struct vd55g0_dev *sensor, int expo_ms)
+static int vd55g0_update_exposure(struct vd55g0_dev *sensor, int expo_ms)
 {
-	sensor->manual_expo_ms = expo_ms;
+	sensor->manual_expo = expo_ms;
 	if (sensor->streaming)
-		return apply_exposure(sensor);
+		return vd55g0_apply_exposure(sensor);
 
 	return 0;
 }
@@ -728,7 +728,7 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	ret = apply_exposure(sensor);
+	ret = vd55g0_apply_exposure(sensor);
 	if (ret)
 		return ret;
 
@@ -808,7 +808,7 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 	vd55g0_write_reg(sensor, VD55G0_REG_FORMAT_CTRL,
 			 get_bpp_by_code(sensor->fmt.code), &ret);
 	vd55g0_write_reg(sensor, VD55G0_REG_OIF_IMG_CTRL,
-			 get_datatype_by_code(sensor->fmt.code), &ret);
+			 get_data_type_by_code(sensor->fmt.code), &ret);
 	if (ret)
 		goto err_rpm_put;
 
@@ -867,7 +867,7 @@ err_str_dis:
 }
 
 #if KERNEL_VERSION(4, 20, 0) > LINUX_VERSION_CODE
-static int vd55g0_rx_from_ep(struct vd55g0_dev *sensor,
+static int vd55g0_tx_from_ep(struct vd55g0_dev *sensor,
 			     struct fwnode_handle *endpoint)
 {
 	struct i2c_client *client = sensor->i2c_client;
@@ -941,7 +941,7 @@ error_alloc:
 	return -EINVAL;
 }
 #else
-static int vd55g0_rx_from_ep(struct vd55g0_dev *sensor,
+static int vd55g0_tx_from_ep(struct vd55g0_dev *sensor,
 			     struct fwnode_handle *endpoint)
 {
 	struct v4l2_fwnode_endpoint ep = { .bus_type = V4L2_MBUS_CSI2_DPHY };
@@ -1404,7 +1404,7 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		ret = vd55g0_update_digital_gain(sensor, ctrl->val);
 		break;
 	case V4L2_CID_EXPOSURE:
-		ret = vd55g0_set_exposure(sensor, ctrl->val);
+		ret = vd55g0_update_exposure(sensor, ctrl->val);
 		break;
 	case V4L2_CID_3A_LOCK:
 		ret = vd55g0_lock_exposure(sensor, ctrl);
@@ -1644,7 +1644,7 @@ static int vd55g0_power_off(struct device *dev)
 static int vd55g0_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	struct fwnode_handle *endpoint;
+	struct fwnode_handle *handle;
 	struct vd55g0_dev *sensor;
 	int ret;
 
@@ -1662,23 +1662,23 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->fmt.colorspace = V4L2_COLORSPACE_SRGB;
 	sensor->frame_interval.numerator = 1;
 	sensor->frame_interval.denominator = 15;
-	sensor->manual_expo_ms = 10;
+	sensor->manual_expo = 200;
 	sensor->vflip = false;
 	sensor->hflip = false;
 
 	sensor->current_mode = &vd55g0_mode_data[VD55G0_DEFAULT_MODE];
 
-	endpoint = fwnode_graph_get_next_endpoint(
+	handle = fwnode_graph_get_next_endpoint(
 		of_fwnode_handle(dev->of_node), NULL);
-	if (!endpoint) {
-		dev_err(dev, "endpoint node not found\n");
+	if (!handle) {
+		dev_err(dev, "handle node not found\n");
 		return -EINVAL;
 	}
 
-	ret = vd55g0_rx_from_ep(sensor, endpoint);
-	fwnode_handle_put(endpoint);
+	ret = vd55g0_tx_from_ep(sensor, handle);
+	fwnode_handle_put(handle);
 	if (ret) {
-		dev_err(dev, "Failed to parse endpoint %d\n", ret);
+		dev_err(dev, "Failed to parse handle %d\n", ret);
 		return ret;
 	}
 
