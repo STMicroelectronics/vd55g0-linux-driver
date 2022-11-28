@@ -65,6 +65,8 @@
 #define VD55G0_REG_CLK_PLL_MIPI				VD55G0_REG_32BIT(0x0224)
 #define VD55G0_REG_ISL_ENABLE				VD55G0_REG_8BIT(0x0329)
 #define VD55G0_REG_PATGEN_CTRL				VD55G0_REG_16BIT(0x0400)
+#define VD55G0_PATGEN_TYPE_SHIFT			4
+#define VD55G0_PATGEN_ENABLE				BIT(0)
 #define VD55G0_REG_MANUAL_ANALOG_GAIN			VD55G0_REG_8BIT(0x044d)
 #define VD55G0_REG_MANUAL_COARSE_EXPOSURE		VD55G0_REG_16BIT(0x044e)
 #define VD55G0_REG_MANUAL_DIGITAL_GAIN			VD55G0_REG_16BIT(0x0450)
@@ -269,6 +271,7 @@ struct vd55g0_dev {
 	u16 vblank_min;
 	u16 frame_length;
 	bool ae_frozen;
+	u32 pattern;
 };
 
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
@@ -482,16 +485,26 @@ static int apply_exposure(struct vd55g0_dev *sensor)
 				 sensor->manual_expo_ms, NULL);
 }
 
-static int vd55g0_update_patgen(struct vd55g0_dev *sensor, u32 index)
+static int vd55g0_apply_patgen(struct vd55g0_dev *sensor)
 {
-	u32 pattern = index <= 3 ? index : index + 12;
-	u16 reg;
+	static const u8 index2val[] = {
+		0x0, 0x0, 0x8, 0x10, 0x20, 0x21, 0x22, 0x28
+	};
+	u32 pattern = index2val[sensor->pattern];
+	u32 reg = pattern << VD55G0_PATGEN_TYPE_SHIFT;
 
-	reg = pattern << 4;
-	if (index)
-		reg |= 1;
-
+	if (sensor->pattern != 0)
+		reg |= VD55G0_PATGEN_ENABLE;
 	return vd55g0_write_reg(sensor, VD55G0_REG_PATGEN_CTRL, reg, NULL);
+}
+
+static int vd55g0_update_patgen(struct vd55g0_dev *sensor, u32 pattern)
+{
+	sensor->pattern = pattern;
+
+	if (sensor->streaming)
+		return vd55g0_apply_patgen(sensor);
+	return 0;
 }
 
 static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
@@ -719,6 +732,9 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
+	ret = vd55g0_apply_patgen(sensor);
+	if (ret)
+		return ret;
 
 	return 0;
 }
