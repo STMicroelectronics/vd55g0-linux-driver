@@ -982,7 +982,7 @@ static int vd55g0_patch(struct vd55g0_dev *sensor)
 			patch >> 8, patch & 0xff);
 		return -ENODEV;
 	}
-	dev_info(&client->dev, "patch %d.%d applied", patch >> 8, patch & 0xff);
+	dev_dbg(&client->dev, "patch %d.%d applied", patch >> 8, patch & 0xff);
 
 	return 0;
 }
@@ -1004,8 +1004,6 @@ static int vd55g0_boot(struct vd55g0_dev *sensor)
 				VD55G0_TIMEOUT_MS);
 	if (ret)
 		return ret;
-
-	dev_info(&client->dev, "sensor boot successfully");
 
 	return 0;
 }
@@ -1051,8 +1049,6 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 
 	sensor->data_rate_in_mbps = mipi_bps;
 	sensor->pclk = (sensor->data_rate_in_mbps * 2) / 10;
-	dev_info(&client->dev, "data rate = %d mbps",
-		 sensor->data_rate_in_mbps);
 
 	return 0;
 }
@@ -1683,7 +1679,7 @@ static int vd55g0_probe(struct i2c_client *client)
 	pm_runtime_set_autosuspend_delay(&client->dev, 1000);
 	pm_runtime_use_autosuspend(&client->dev);
 
-	dev_info(&client->dev, "vd55g0 probe successfully");
+	dev_dbg(&client->dev, "vd55g0 probe successfully");
 
 	return 0;
 
