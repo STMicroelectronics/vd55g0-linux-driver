@@ -67,9 +67,7 @@
 #define VD55G0_REG_FORMAT_CTRL				VD55G0_REG_8BIT(0x030a)
 #define VD55G0_REG_OIF_CTRL				VD55G0_REG_16BIT(0x030c)
 #define VD55G0_REG_OIF_IMG_CTRL				VD55G0_REG_8BIT(0x030f)
-#define VD55G0_REG_OIF_ISL_CTRL				VD55G0_REG_8BIT(0x0310)
 #define VD55G0_REG_CLK_PLL_MIPI				VD55G0_REG_32BIT(0x0224)
-#define VD55G0_REG_ISL_ENABLE				VD55G0_REG_8BIT(0x0329)
 #define VD55G0_REG_PATGEN_CTRL				VD55G0_REG_16BIT(0x0400)
 #define VD55G0_PATGEN_TYPE_SHIFT			4
 #define VD55G0_PATGEN_ENABLE				BIT(0)
@@ -156,7 +154,6 @@ struct vd55g0_mode_info {
 	u32 height;
 	enum vd55g0_bin_mode bin_mode;
 	struct v4l2_rect crop;
-	int is_isl;
 };
 
 struct vd55g0_fmt_desc {
@@ -193,7 +190,6 @@ static const struct vd55g0_fmt_desc vd55g0_supported_codes[] = {
 	},
 };
 
-//TODO ISL ?
 static const struct vd55g0_mode_info vd55g0_mode_data[] = {
 /* Uncomment once frame alignement bug is sorted out */
 #if 0
@@ -798,7 +794,6 @@ static int vd55g0_apply_frame_format(struct vd55g0_dev *sensor)
 static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(&sensor->sd);
-	int is_isl = sensor->current_mode->is_isl;
 	int ret;
 
 	ret = pm_runtime_get_sync(&client->dev);
@@ -814,13 +809,6 @@ static int vd55g0_stream_enable(struct vd55g0_dev *sensor)
 			 get_bpp_by_code(sensor->fmt.code), &ret);
 	vd55g0_write_reg(sensor, VD55G0_REG_OIF_IMG_CTRL,
 			 get_datatype_by_code(sensor->fmt.code), &ret);
-	if (ret)
-		goto err_rpm_put;
-
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_OIF_ISL_CTRL, is_isl ?
-			       get_datatype_by_code(sensor->fmt.code) :
-			       0x12, NULL);
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_ISL_ENABLE, is_isl, NULL);
 	if (ret)
 		goto err_rpm_put;
 
@@ -1113,9 +1101,6 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_CLK_PLL_MIPI, mipi_bps, NULL);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_ISL_ENABLE, 0, NULL);
 	if (ret)
 		return ret;
 	/* use auto expo by default */
