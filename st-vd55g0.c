@@ -95,6 +95,7 @@
 #define VD55G0_REG_GPIO_2_CTRL				VD55G0_REG_8BIT(0x0469)
 #define VD55G0_REG_GPIO_3_CTRL				VD55G0_REG_8BIT(0x046a)
 #define VD55G0_REG_READOUT_CTRL				VD55G0_REG_8BIT(0x047a)
+#define VD55G0_REG_DARKCAL_PEDESTAL			VD55G0_REG_8BIT(0x0416)
 
 #define VD55G0_WIDTH					644
 #define VD55G0_HEIGHT					604
@@ -106,12 +107,14 @@
 #define VD55G0_FRAME_LENGTH_DEF				1980 /* 60 fps */
 #define VD55G0_TIMEOUT_MS				500
 #define VD55G0_MEDIA_BUS_FMT_DEF			MEDIA_BUS_FMT_Y8_1X8
+#define VD55G0_DARKCAL_PEDESTAL_DEF			0x40
 
 #define V4L2_CID_GPIO0_MODE			(V4L2_CID_USER_BASE | 0x1010)
 #define V4L2_CID_GPIO1_MODE			(V4L2_CID_USER_BASE | 0x1011)
 #define V4L2_CID_GPIO2_MODE			(V4L2_CID_USER_BASE | 0x1012)
 #define V4L2_CID_GPIO3_MODE			(V4L2_CID_USER_BASE | 0x1013)
 #define V4L2_CID_TEMPERATURE			(V4L2_CID_USER_BASE | 0x1020)
+#define V4L2_CID_DARKCAL_PEDESTAL		(V4L2_CID_USER_BASE | 0x1021)
 
 #include "st-vd55g0_patch.c"
 
@@ -285,6 +288,7 @@ struct vd55g0_dev {
 	u16 frame_length;
 	bool ae_frozen;
 	u32 pattern;
+	u8 darkcal_pedestal;
 };
 
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
@@ -520,6 +524,12 @@ static int vd55g0_apply_patgen(struct vd55g0_dev *sensor)
 	return vd55g0_write_reg(sensor, VD55G0_REG_PATGEN_CTRL, reg, NULL);
 }
 
+static int vd55g0_apply_darkcal_pedestal(struct vd55g0_dev *sensor)
+{
+	return vd55g0_write_reg(sensor, VD55G0_REG_DARKCAL_PEDESTAL,
+				 sensor->darkcal_pedestal, NULL);
+}
+
 static int vd55g0_update_patgen(struct vd55g0_dev *sensor, u32 pattern)
 {
 	sensor->pattern = pattern;
@@ -665,6 +675,16 @@ static int vd55g0_update_exposure(struct vd55g0_dev *sensor, int expo_ms)
 	return 0;
 }
 
+static int vd55g0_update_darkcal_pedestal(struct vd55g0_dev *sensor,
+					  int pedestal)
+{
+	sensor->darkcal_pedestal = pedestal;
+	if (sensor->streaming)
+		return vd55g0_apply_darkcal_pedestal(sensor);
+
+	return 0;
+}
+
 static int vd55g0_apply_reset(struct vd55g0_dev *sensor)
 {
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
@@ -750,6 +770,10 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 		return ret;
 
 	ret = vd55g0_apply_patgen(sensor);
+	if (ret)
+		return ret;
+
+	ret = vd55g0_apply_darkcal_pedestal(sensor);
 	if (ret)
 		return ret;
 
@@ -1343,6 +1367,9 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		ret = vd55g0_update_gpiox_strobe_mode(sensor, ctrl->val,
 			ctrl->id - V4L2_CID_GPIO0_MODE);
 		break;
+	case V4L2_CID_DARKCAL_PEDESTAL:
+		ret = vd55g0_update_darkcal_pedestal(sensor, ctrl->val);
+		break;
 	case V4L2_CID_VBLANK:
 		ret = vd55g0_update_vblank(sensor, ctrl->val);
 		break;
@@ -1403,6 +1430,16 @@ static const struct v4l2_ctrl_config vd55g0_temp_ctrl = {
 	.max		= 1023,
 	.step		= 1,
 };
+static const struct v4l2_ctrl_config vd55g0_darkcal_pedestal_ctrl = {
+	.ops		= &vd55g0_ctrl_ops,
+	.id		= V4L2_CID_DARKCAL_PEDESTAL,
+	.name		= "Dark Calibration Pedestal",
+	.type		= V4L2_CTRL_TYPE_INTEGER,
+	.min		= 0,
+	.max		= 255,
+	.step		= 1,
+	.def		= VD55G0_DARKCAL_PEDESTAL_DEF,
+};
 
 static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 {
@@ -1435,6 +1472,7 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	v4l2_ctrl_new_custom(hdl, &vd55g0_gpio3_ctrl, NULL);
 	ctrl = v4l2_ctrl_new_custom(hdl, &vd55g0_temp_ctrl, NULL);
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
+	v4l2_ctrl_new_custom(hdl, &vd55g0_darkcal_pedestal_ctrl, NULL);
 	ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK, 0,
 				 sensor->line_length, 1,
 				 sensor->line_length - cur_mode->width);
@@ -1592,6 +1630,7 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->manual_expo = 200;
 	sensor->vflip = false;
 	sensor->hflip = false;
+	sensor->darkcal_pedestal = VD55G0_DARKCAL_PEDESTAL_DEF;
 
 	sensor->current_mode = &vd55g0_mode_data[VD55G0_DEFAULT_MODE];
 
@@ -1637,6 +1676,7 @@ static int vd55g0_probe(struct i2c_client *client)
 		return ret;
 	}
 
+	//TODO power on should not be necessary
 	ret = vd55g0_power_on(dev);
 	if (ret)
 		return ret;
