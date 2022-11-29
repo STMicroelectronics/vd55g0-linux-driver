@@ -48,6 +48,7 @@
 #define VD55G0_REG_MODEL_ID				VD55G0_REG_16BIT(0x0000)
 #define VD55G0_MODEL_ID					0x4730
 #define VD55G0_REG_FWPATCH_REVISION			VD55G0_REG_16BIT(0x0022)
+#define VD55G0_REG_FWPATCH_START_ADDR			VD55G0_REG_8BIT(0x2000)
 #define VD55G0_REG_SYSTEM_FSM				VD55G0_REG_8BIT(0x002c)
 #define VD55G0_SYSTEM_FSM_READY_TO_BOOT			0x01
 #define VD55G0_SYSTEM_FSM_SW_STBY			0x02
@@ -957,8 +958,8 @@ static int vd55g0_patch(struct vd55g0_dev *sensor)
 	u16 patch;
 	int ret;
 
-	ret = vd55g0_write_array(sensor, 0x2000, sizeof(array_0x2000),
-				 array_0x2000);
+	ret = vd55g0_write_array(sensor, VD55G0_REG_FWPATCH_START_ADDR,
+				 sizeof(patch_array), patch_array);
 	if (ret)
 		return ret;
 
