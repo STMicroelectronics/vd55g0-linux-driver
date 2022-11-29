@@ -1733,7 +1733,8 @@ static struct i2c_driver vd55g0_i2c_driver = {
 
 module_i2c_driver(vd55g0_i2c_driver);
 
-MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@st.com>");
+MODULE_AUTHOR("Benjamin Mugnier <benjamin.mugnier@foss.st.com>");
 MODULE_AUTHOR("Mickael Guene <mickael.guene@st.com>");
+MODULE_AUTHOR("Sylvain Petinot <sylvain.petinot@foss.st.com>");
 MODULE_DESCRIPTION("VD55G0 camera subdev driver");
 MODULE_LICENSE("GPL v2");
