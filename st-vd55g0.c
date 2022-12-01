@@ -96,6 +96,7 @@
 #define VD55G0_REG_GPIO_3_CTRL				VD55G0_REG_8BIT(0x046a)
 #define VD55G0_REG_READOUT_CTRL				VD55G0_REG_8BIT(0x047a)
 #define VD55G0_REG_DARKCAL_PEDESTAL			VD55G0_REG_8BIT(0x0416)
+#define VD55G0_REG_AE_TARGET_PERCENTAGE			VD55G0_REG_8BIT(0x0440)
 
 #define VD55G0_WIDTH					644
 #define VD55G0_HEIGHT					604
@@ -127,6 +128,12 @@ static const char * const vd55g0_test_pattern_menu[] = {
 	"Vgrey",
 	"Dgrey",
 	"PN28",
+};
+
+static const s64 vd55g0_ev_bias_menu[] = {
+	-3000, -2500, -2000, -1500, -1000, -500,
+	0,
+	  500,  1000,  1500,  2000,  2500, 3000,
 };
 
 static const char * const vd55g0_gpios_modes[] = {
@@ -289,6 +296,7 @@ struct vd55g0_dev {
 	bool ae_frozen;
 	u32 pattern;
 	u8 darkcal_pedestal;
+	u16 exposure_target;
 };
 
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
@@ -530,6 +538,12 @@ static int vd55g0_apply_darkcal_pedestal(struct vd55g0_dev *sensor)
 				 sensor->darkcal_pedestal, NULL);
 }
 
+static int vd55g0_apply_exposure_target(struct vd55g0_dev *sensor)
+{
+	return vd55g0_write_reg(sensor, VD55G0_REG_AE_TARGET_PERCENTAGE,
+				sensor->exposure_target, NULL);
+}
+
 static int vd55g0_update_patgen(struct vd55g0_dev *sensor, u32 pattern)
 {
 	sensor->pattern = pattern;
@@ -681,6 +695,23 @@ static int vd55g0_update_darkcal_pedestal(struct vd55g0_dev *sensor,
 	sensor->darkcal_pedestal = pedestal;
 	if (sensor->streaming)
 		return vd55g0_apply_darkcal_pedestal(sensor);
+
+	return 0;
+}
+
+static int vd55g0_update_exposure_target(struct vd55g0_dev *sensor, int index)
+{
+	/*
+	 * Find auto exposure target with: default target exposure * 2^EV
+	 * Defaut target exposure being 27 for the sensor.
+	 */
+	static const unsigned int index2exposure_target[] = {
+		3, 5, 7, 10, 14, 19, 27, 38, 54, 76, 108, 153, 216,
+	};
+
+	sensor->exposure_target = index2exposure_target[index];
+	if (sensor->streaming)
+		return vd55g0_apply_exposure_target(sensor);
 
 	return 0;
 }
@@ -1373,6 +1404,13 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_VBLANK:
 		ret = vd55g0_update_vblank(sensor, ctrl->val);
 		break;
+	case V4L2_CID_AUTO_EXPOSURE_BIAS:
+		/*
+		 * We use auto exposure target percentage register to control
+		 * exposure bias for more precision.
+		 */
+		ret = vd55g0_update_exposure_target(sensor, ctrl->val);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1455,6 +1493,10 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
 				     ARRAY_SIZE(vd55g0_test_pattern_menu) - 1,
 				     0, 0, vd55g0_test_pattern_menu);
+	v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_AUTO_EXPOSURE_BIAS,
+			       ARRAY_SIZE(vd55g0_ev_bias_menu) - 1,
+			       ARRAY_SIZE(vd55g0_ev_bias_menu) / 2,
+			       vd55g0_ev_bias_menu);
 	ctrl = v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_LINK_FREQ,
 				      ARRAY_SIZE(link_freq) - 1, 0, link_freq);
 	ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
