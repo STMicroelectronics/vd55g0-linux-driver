@@ -1539,8 +1539,6 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 					       0, 1, 1, sensor->vflip);
 	sensor->hflip_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP,
 					       0, 1, 1, sensor->hflip);
-	v4l2_ctrl_grab(sensor->vflip_ctrl, false);
-	v4l2_ctrl_grab(sensor->hflip_ctrl, false);
 
 	if (hdl->error) {
 		ret = hdl->error;
