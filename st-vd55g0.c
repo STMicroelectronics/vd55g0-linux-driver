@@ -95,6 +95,14 @@
 #define VD55G0_REG_GPIO_2_CTRL				VD55G0_REG_8BIT(0x0469)
 #define VD55G0_REG_GPIO_3_CTRL				VD55G0_REG_8BIT(0x046a)
 #define VD55G0_REG_READOUT_CTRL				VD55G0_REG_8BIT(0x047a)
+#define VD55G0_REG_DARKCAL_CTRL				VD55G0_REG_8BIT(0x032c)
+#define VD55G0_DARKCAL_BYPASS				0
+#define VD55G0_DARKCAL_AUTO				1
+#define VD55G0_REG_DUSTER_CTRL				VD55G0_REG_8BIT(0x0316)
+#define VD55G0_DUSTER_ENABLE				BIT(0)
+#define VD55G0_DUSTER_DISABLE				0
+#define VD55G0_DUSTER_DYN_ENABLE			BIT(1)
+#define VD55G0_DUSTER_RING_ENABLE			BIT(4)
 #define VD55G0_REG_DARKCAL_PEDESTAL			VD55G0_REG_8BIT(0x0416)
 #define VD55G0_REG_AE_TARGET_PERCENTAGE			VD55G0_REG_8BIT(0x0440)
 
@@ -280,6 +288,7 @@ struct vd55g0_dev {
 	struct v4l2_ctrl *vblank_ctrl;
 	struct v4l2_ctrl *vflip_ctrl;
 	struct v4l2_ctrl *hflip_ctrl;
+	struct v4l2_ctrl *pattern_ctrl;
 	bool streaming;
 	struct v4l2_mbus_framefmt fmt;
 	const struct vd55g0_mode_info *current_mode;
@@ -526,9 +535,26 @@ static int vd55g0_apply_patgen(struct vd55g0_dev *sensor)
 	};
 	u32 pattern = index2val[sensor->pattern];
 	u32 reg = pattern << VD55G0_PATGEN_TYPE_SHIFT;
+	u8 darkcal = VD55G0_DARKCAL_AUTO;
+	u8 duster = VD55G0_DUSTER_RING_ENABLE | VD55G0_DUSTER_DYN_ENABLE |
+		    VD55G0_DUSTER_ENABLE;
+	int ret = 0;
 
-	if (sensor->pattern != 0)
+	if (sensor->pattern != 0) {
 		reg |= VD55G0_PATGEN_ENABLE;
+		/*
+		 * Take care of dark calibaration and duster to not mess up the
+		 * test pattern output.
+		 */
+		darkcal = VD55G0_DARKCAL_BYPASS;
+		duster = VD55G0_DUSTER_DISABLE;
+	}
+
+	vd55g0_write_reg(sensor, VD55G0_REG_DARKCAL_CTRL, darkcal, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_DUSTER_CTRL, duster, &ret);
+	if (ret)
+		return ret;
+
 	return vd55g0_write_reg(sensor, VD55G0_REG_PATGEN_CTRL, reg, NULL);
 }
 
@@ -542,15 +568,6 @@ static int vd55g0_apply_exposure_target(struct vd55g0_dev *sensor)
 {
 	return vd55g0_write_reg(sensor, VD55G0_REG_AE_TARGET_PERCENTAGE,
 				sensor->exposure_target, NULL);
-}
-
-static int vd55g0_update_patgen(struct vd55g0_dev *sensor, u32 pattern)
-{
-	sensor->pattern = pattern;
-
-	if (sensor->streaming)
-		return vd55g0_apply_patgen(sensor);
-	return 0;
 }
 
 static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
@@ -1121,9 +1138,10 @@ static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 	mutex_unlock(&sensor->lock);
 
 	if (!ret) {
-		/* vflip and hflip cannot change during streaming */
+		/* vflip, hflip, and patgen cannot change during streaming */
 		v4l2_ctrl_grab(sensor->vflip_ctrl, enable);
 		v4l2_ctrl_grab(sensor->hflip_ctrl, enable);
+		v4l2_ctrl_grab(sensor->pattern_ctrl, enable);
 	}
 
 	return ret;
@@ -1374,7 +1392,8 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		ret = 0;
 		break;
 	case V4L2_CID_TEST_PATTERN:
-		ret = vd55g0_update_patgen(sensor, ctrl->val);
+		/* Can't be done while streaming because of duster disabling */
+		sensor->pattern = ctrl->val;
 		break;
 	case V4L2_CID_EXPOSURE_AUTO:
 		ret = vd55g0_update_exposure_auto(sensor, ctrl->val);
@@ -1485,14 +1504,12 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	struct v4l2_ctrl_handler *hdl = &sensor->ctrl_handler;
 	const struct vd55g0_mode_info *cur_mode = sensor->current_mode;
 	struct v4l2_ctrl *ctrl;
+	unsigned int patgen_size = ARRAY_SIZE(vd55g0_test_pattern_menu) - 1;
 	int ret;
 
 	v4l2_ctrl_handler_init(hdl, 16);
 	/* we can use our own mutex for the ctrl lock */
 	hdl->lock = &sensor->lock;
-	v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
-				     ARRAY_SIZE(vd55g0_test_pattern_menu) - 1,
-				     0, 0, vd55g0_test_pattern_menu);
 	v4l2_ctrl_new_int_menu(hdl, ops, V4L2_CID_AUTO_EXPOSURE_BIAS,
 			       ARRAY_SIZE(vd55g0_ev_bias_menu) - 1,
 			       ARRAY_SIZE(vd55g0_ev_bias_menu) / 2,
@@ -1539,6 +1556,10 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 					       0, 1, 1, sensor->vflip);
 	sensor->hflip_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP,
 					       0, 1, 1, sensor->hflip);
+	sensor->pattern_ctrl =
+		v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
+					     patgen_size, 0, 0,
+					     vd55g0_test_pattern_menu);
 
 	if (hdl->error) {
 		ret = hdl->error;
