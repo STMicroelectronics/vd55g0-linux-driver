@@ -122,6 +122,7 @@
 
 #define V4L2_CID_TEMPERATURE			(V4L2_CID_USER_BASE | 0x1020)
 #define V4L2_CID_DARKCAL_PEDESTAL		(V4L2_CID_USER_BASE | 0x1021)
+#define V4L2_CID_SLAVE				(V4L2_CID_USER_BASE | 0x1022)
 
 #include "st-vd55g0_patch.c"
 
@@ -294,6 +295,7 @@ struct vd55g0_dev {
 	struct v4l2_ctrl *vflip_ctrl;
 	struct v4l2_ctrl *hflip_ctrl;
 	struct v4l2_ctrl *pattern_ctrl;
+	struct v4l2_ctrl *slave_ctrl;
 	bool streaming;
 	struct v4l2_mbus_framefmt fmt;
 	const struct vd55g0_mode_info *current_mode;
@@ -312,6 +314,7 @@ struct vd55g0_dev {
 	u8 darkcal_pedestal;
 	u16 exposure_target;
 	struct vd55g0_gpios gpios;
+	bool is_slave;
 };
 
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
@@ -873,7 +876,6 @@ static int vd55g0_apply_frame_format(struct vd55g0_dev *sensor)
 }
 
 static int vd55g0_set_gpios(struct vd55g0_dev *sensor) {
-	struct i2c_client *client = sensor->i2c_client;
 	struct vd55g0_gpios *gpios = &sensor->gpios;
 	int ret;
 	unsigned int i;
@@ -905,7 +907,7 @@ static int vd55g0_set_gpios(struct vd55g0_dev *sensor) {
 			return -EINVAL;
 	}
 
-	if (gpios->in_sync == ~0)
+	if (!sensor->is_slave)
 		return 0;
 
 	ret = vd55g0_update_gpio_mode(sensor, VD55G0_GPIO_MODE_VTSLAVE,
@@ -1167,6 +1169,10 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 	return ret;
 }
 
+static inline bool vd55g0_can_be_slave(struct vd55g0_dev *sensor) {
+	return sensor->gpios.in_sync != ~0;
+}
+
 static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
@@ -1182,10 +1188,13 @@ static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 	mutex_unlock(&sensor->lock);
 
 	if (!ret) {
-		/* vflip, hflip, and patgen cannot change during streaming */
+		/* These settings cannot change during streaming */
 		v4l2_ctrl_grab(sensor->vflip_ctrl, enable);
 		v4l2_ctrl_grab(sensor->hflip_ctrl, enable);
 		v4l2_ctrl_grab(sensor->pattern_ctrl, enable);
+		if (vd55g0_can_be_slave(sensor)) {
+			v4l2_ctrl_grab(sensor->slave_ctrl, enable);
+		}
 	}
 
 	return ret;
@@ -1467,6 +1476,10 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		 */
 		ret = vd55g0_update_exposure_target(sensor, ctrl->val);
 		break;
+	case V4L2_CID_SLAVE:
+		sensor->is_slave = ctrl->val;
+		ret = 0;
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1498,6 +1511,16 @@ static const struct v4l2_ctrl_config vd55g0_darkcal_pedestal_ctrl = {
 	.max		= 255,
 	.step		= 1,
 	.def		= VD55G0_DARKCAL_PEDESTAL_DEF,
+};
+static const struct v4l2_ctrl_config vd55g0_slave_ctrl = {
+	.ops		= &vd55g0_ctrl_ops,
+	.id		= V4L2_CID_SLAVE,
+	.name		= "VT Slave Mode",
+	.type		= V4L2_CTRL_TYPE_BOOLEAN,
+	.min		= 0,
+	.max		= 1,
+	.step		= 1,
+	.def		= 1,
 };
 
 static int vd55g0_init_controls(struct vd55g0_dev *sensor)
@@ -1558,6 +1581,13 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 		v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
 					     patgen_size, 0, 0,
 					     vd55g0_test_pattern_menu);
+	sensor->slave_ctrl = v4l2_ctrl_new_custom(hdl, &vd55g0_slave_ctrl,
+						  NULL);
+	/* Disable this control if not possible by device tree */
+	if (!vd55g0_can_be_slave(sensor)) {
+		v4l2_ctrl_s_ctrl(sensor->slave_ctrl, false);
+		v4l2_ctrl_grab(sensor->slave_ctrl, true);
+	}
 
 	if (hdl->error) {
 		ret = hdl->error;
@@ -1733,7 +1763,9 @@ static int vd55g0_parse_dt_gpios(struct vd55g0_dev *sensor)
 				return -EINVAL;
 			}
 		}
+
 		dev_dbg(&client->dev, "GPIO %d in input slave mode\n", gpios->in_sync);
+		sensor->is_slave = true;
 	}
 
 	/* Check mutual exclusivity between leds and out_sync */
