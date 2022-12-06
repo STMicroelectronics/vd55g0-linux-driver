@@ -1475,6 +1475,7 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_TEST_PATTERN:
 		/* Can't be done while streaming because of duster disabling */
 		sensor->pattern = ctrl->val;
+		ret = 0;
 		break;
 	case V4L2_CID_EXPOSURE_AUTO:
 		ret = vd55g0_update_exposure_auto(sensor, ctrl->val);
