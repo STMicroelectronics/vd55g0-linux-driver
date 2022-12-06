@@ -23,8 +23,8 @@
 #include <media/v4l2-subdev.h>
 
 /* Backward compatibility */
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 18, 0)
-#define MIPI_CSI2_DT_RAW8 	0x2a
+#if KERNEL_VERSION(5, 18, 0) >= LINUX_VERSION_CODE
+#define MIPI_CSI2_DT_RAW8	0x2a
 #define MIPI_CSI2_DT_RAW10	0x2b
 #define MIPI_CSI2_DT_RAW12	0x2c
 #define MIPI_CSI2_DT_RAW14	0x2d
@@ -33,7 +33,7 @@
 #include <media/mipi-csi2.h>
 #endif
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+#if KERNEL_VERSION(5, 15, 0) >= LINUX_VERSION_CODE
 #define HZ_PER_MHZ		1000000UL
 #else
 #include <linux/units.h>
@@ -170,7 +170,6 @@ enum vd55g0_gpio_modes {
 	VD55G0_GPIO_MODE_VTSLAVE,
 };
 
-
 struct vd55g0_mode_info {
 	u32 width;
 	u32 height;
@@ -213,7 +212,7 @@ static const struct vd55g0_fmt_desc vd55g0_supported_codes[] = {
 };
 
 static const struct vd55g0_mode_info vd55g0_mode_data[] = {
-/* Uncomment once frame alignement bug is sorted out */
+/* Uncomment once frame alignment bug is sorted out */
 #if 0
 	{
 		.width = VD55G0_WIDTH,
@@ -484,7 +483,7 @@ static int vd55g0_poll_reg(struct vd55g0_dev *sensor, u32 reg, u8 poll_val,
 {
 	const unsigned int loop_delay_ms = 10;
 	int ret;
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 7, 0)
+#if KERNEL_VERSION(5, 7, 0) >= LINUX_VERSION_CODE
 	int loop_nb = timeout_ms / loop_delay_ms;
 
 	while (--loop_nb) {
@@ -512,7 +511,7 @@ static int vd55g0_wait_state(struct vd55g0_dev *sensor, int state,
 }
 
 static int vd55g0_update_gpio_mode(struct vd55g0_dev *sensor, u32 mode,
-					   int gpio)
+				   int gpio)
 {
 	u8 index2val[] = {0x01, 0x02, 0x06, 0x0a};
 
@@ -521,7 +520,8 @@ static int vd55g0_update_gpio_mode(struct vd55g0_dev *sensor, u32 mode,
 }
 
 static int vd55g0_set_gpios_array(struct vd55g0_dev *sensor, u32 *array,
-				  int size, enum vd55g0_gpio_modes mode) {
+				  int size, enum vd55g0_gpio_modes mode)
+{
 	unsigned int i;
 	int ret;
 
@@ -536,7 +536,8 @@ static int vd55g0_set_gpios_array(struct vd55g0_dev *sensor, u32 *array,
 	return 0;
 }
 
-static int vd55g0_apply_exposure_auto(struct vd55g0_dev *sensor) {
+static int vd55g0_apply_exposure_auto(struct vd55g0_dev *sensor)
+{
 	enum vd55g0_expo_state exp = sensor->expo_state;
 
 	if (sensor->ae_frozen && sensor->expo_state == VD55G0_EXP_AUTO)
@@ -638,7 +639,8 @@ static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 	return 0;
 }
 
-static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, struct v4l2_ctrl *ctrl)
+static int vd55g0_lock_exposure(struct vd55g0_dev *sensor,
+				struct v4l2_ctrl *ctrl)
 {
 	/* Only exposure lock is supported */
 	bool ae_lock = ctrl->val & V4L2_LOCK_EXPOSURE;
@@ -821,8 +823,8 @@ static int vd55g0_try_fmt_internal(struct v4l2_subdev *sd,
 		index = 0;
 
 	mode = v4l2_find_nearest_size(vd55g0_mode_data,
-				      ARRAY_SIZE(vd55g0_mode_data), width, height,
-				      fmt->width, fmt->height);
+				      ARRAY_SIZE(vd55g0_mode_data), width,
+				      height, fmt->width, fmt->height);
 	if (new_mode)
 		*new_mode = mode;
 
@@ -831,7 +833,6 @@ static int vd55g0_try_fmt_internal(struct v4l2_subdev *sd,
 
 	return 0;
 }
-
 
 static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 {
@@ -912,7 +913,8 @@ static int vd55g0_apply_frame_format(struct vd55g0_dev *sensor)
 	return ret;
 }
 
-static int vd55g0_set_gpios(struct vd55g0_dev *sensor) {
+static int vd55g0_set_gpios(struct vd55g0_dev *sensor)
+{
 	struct vd55g0_gpios *gpios = &sensor->gpios;
 	int ret;
 	unsigned int i;
@@ -1039,7 +1041,7 @@ static int vd55g0_tx_from_ep(struct vd55g0_dev *sensor,
 	int p, l;
 	int i;
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,20,0)
+#if KERNEL_VERSION(4, 20, 0) >= LINUX_VERSION_CODE
 	ep = v4l2_fwnode_endpoint_alloc_parse(handle);
 #else
 	struct v4l2_fwnode_endpoint ep_node = { .bus_type =
@@ -1197,7 +1199,8 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 	return ret;
 }
 
-static inline bool vd55g0_can_be_slave(struct vd55g0_dev *sensor) {
+static inline bool vd55g0_can_be_slave(struct vd55g0_dev *sensor)
+{
 	return sensor->gpios.in_sync != ~0;
 }
 
@@ -1220,17 +1223,16 @@ static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 		v4l2_ctrl_grab(sensor->vflip_ctrl, enable);
 		v4l2_ctrl_grab(sensor->hflip_ctrl, enable);
 		v4l2_ctrl_grab(sensor->pattern_ctrl, enable);
-		if (vd55g0_can_be_slave(sensor)) {
+		if (vd55g0_can_be_slave(sensor))
 			v4l2_ctrl_grab(sensor->slave_ctrl, enable);
-		}
 	}
 
 	return ret;
 }
 
 static int vd55g0_get_selection(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
-				 struct v4l2_subdev_pad_config *cfg,
+#if KERNEL_VERSION(5, 15, 0) >= LINUX_VERSION_CODE
+				struct v4l2_subdev_pad_config *cfg,
 #else
 				struct v4l2_subdev_state *sd_state,
 #endif
@@ -1327,7 +1329,7 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 		goto out;
 
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+#if KERNEL_VERSION(5, 15, 0) >= LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(sd, cfg, 0);
 #else
 		fmt = v4l2_subdev_get_try_format(sd, sd_state, 0);
@@ -1362,7 +1364,7 @@ out:
 }
 
 static int vd55g0_init_cfg(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+#if KERNEL_VERSION(5, 15, 0) >= LINUX_VERSION_CODE
 			   struct v4l2_subdev_pad_config *cfg
 #else
 			   struct v4l2_subdev_state *sd_state
@@ -1375,13 +1377,12 @@ static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 	vd55g0_fill_framefmt(sensor, sensor->current_mode, &fmt.format,
 			     VD55G0_MEDIA_BUS_FMT_DEF);
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 15, 0)
+#if KERNEL_VERSION(5, 15, 0) >= LINUX_VERSION_CODE
 	return vd55g0_set_fmt(sd, cfg, &fmt);
 #else
 	return vd55g0_set_fmt(sd, sd_state, &fmt);
 #endif
 }
-
 
 static int vd55g0_enum_frame_size(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
@@ -1533,6 +1534,7 @@ static const struct v4l2_ctrl_config vd55g0_temp_ctrl = {
 	.max		= 1023,
 	.step		= 1,
 };
+
 static const struct v4l2_ctrl_config vd55g0_darkcal_pedestal_ctrl = {
 	.ops		= &vd55g0_ctrl_ops,
 	.id		= V4L2_CID_DARKCAL_PEDESTAL,
@@ -1543,6 +1545,7 @@ static const struct v4l2_ctrl_config vd55g0_darkcal_pedestal_ctrl = {
 	.step		= 1,
 	.def		= VD55G0_DARKCAL_PEDESTAL_DEF,
 };
+
 static const struct v4l2_ctrl_config vd55g0_slave_ctrl = {
 	.ops		= &vd55g0_ctrl_ops,
 	.id		= V4L2_CID_SLAVE,
@@ -1729,8 +1732,9 @@ static int vd55g0_power_off(struct device *dev)
 	return 0;
 }
 
-static int vd55g0_parse_dt_gpios_array(struct vd55g0_dev *sensor, char *prop_name,
-		u32 *array, int *nb) {
+static int vd55g0_parse_dt_gpios_array(struct vd55g0_dev *sensor,
+				       char *prop_name, u32 *array, int *nb)
+{
 	struct i2c_client *client = sensor->i2c_client;
 	struct device_node *np = client->dev.of_node;
 	unsigned int i;
@@ -1741,7 +1745,8 @@ static int vd55g0_parse_dt_gpios_array(struct vd55g0_dev *sensor, char *prop_nam
 	if (*nb > 0) {
 		for (i = 0; i < *nb;  i++) {
 			if (array[i] >= VD55G0_NB_GPIOS) {
-				dev_err(&client->dev, "invalid GPIO %d for leds\n", array[i]);
+				dev_err(&client->dev, "invalid GPIO %d for leds\n",
+					array[i]);
 				return -EINVAL;
 			}
 		}
@@ -1766,13 +1771,13 @@ static int vd55g0_parse_dt_gpios(struct vd55g0_dev *sensor)
 	gpios->in_sync = ~0;
 
 	ret = vd55g0_parse_dt_gpios_array(sensor, "st,led-gpios",
-					  (u32*) &gpios->leds,
+					  (u32 *)&gpios->leds,
 					  &nb_gpios_leds);
 	if (ret)
 		return ret;
 
 	ret = vd55g0_parse_dt_gpios_array(sensor, "st,out-sync-gpios",
-					  (u32*) &gpios->out_sync,
+					  (u32 *)&gpios->out_sync,
 					  &nb_gpios_out);
 	if (ret)
 		return ret;
@@ -1780,25 +1785,30 @@ static int vd55g0_parse_dt_gpios(struct vd55g0_dev *sensor)
 	ret = of_property_read_u32(np, "st,in-sync-gpio", &gpios->in_sync);
 	if (ret == 0) {
 		if (gpios->in_sync != 0) {
-			dev_err(&client->dev, "input sync gpio must be 0 if present, found %d\n", gpios->in_sync);
+			dev_err(&client->dev, "input sync gpio must be 0 if present, found %d\n",
+				gpios->in_sync);
 			return -EINVAL;
 		}
 
 		/* Check no other gpios array use gpio 0 */
 		for (i = 0; i < nb_gpios_leds;  i++) {
 			if (gpios->leds[i] == gpios->in_sync) {
-				dev_err(&client->dev, "in-sync GPIO %d is used by another led gpio\n", gpios->in_sync);
+				dev_err(&client->dev, "in-sync GPIO %d is used by another led gpio\n",
+					gpios->in_sync);
 				return -EINVAL;
 			}
 		}
 		for (i = 0; i < nb_gpios_out;  i++) {
 			if (gpios->out_sync[i] == gpios->in_sync) {
-				dev_err(&client->dev, "in-sync GPIO %d is used by another out-sync gpio\n", gpios->in_sync);
+				dev_err(&client->dev, "in-sync GPIO %d is used by another out-sync gpio\n",
+					gpios->in_sync);
 				return -EINVAL;
 			}
 		}
 
-		dev_dbg(&client->dev, "GPIO %d in input slave mode\n", gpios->in_sync);
+		dev_dbg(&client->dev, "GPIO %d in input slave mode\n",
+			gpios->in_sync);
+
 		sensor->is_slave = true;
 	}
 
@@ -1806,7 +1816,8 @@ static int vd55g0_parse_dt_gpios(struct vd55g0_dev *sensor)
 	for (i = 0; i < nb_gpios_leds;  i++) {
 		for (j = 0; j < nb_gpios_out;  j++) {
 			if (gpios->leds[i] == gpios->out_sync[j]) {
-				dev_err(&client->dev, "GPIO %d used in both leds and out-sync\n", gpios->leds[i]);
+				dev_err(&client->dev, "GPIO %d used in both leds and out-sync\n",
+					gpios->leds[i]);
 				return -EINVAL;
 			}
 		}
@@ -1844,8 +1855,8 @@ static int vd55g0_probe(struct i2c_client *client)
 
 	sensor->current_mode = &vd55g0_mode_data[VD55G0_DEFAULT_MODE];
 
-	handle = fwnode_graph_get_next_endpoint(
-		of_fwnode_handle(dev->of_node), NULL);
+	handle = fwnode_graph_get_next_endpoint(of_fwnode_handle(dev->of_node),
+						NULL);
 	if (!handle) {
 		dev_err(dev, "handle node not found\n");
 		return -EINVAL;
