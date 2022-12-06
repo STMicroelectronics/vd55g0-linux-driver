@@ -1115,8 +1115,7 @@ error_ep:
 static int vd55g0_patch(struct vd55g0_dev *sensor)
 {
 	struct i2c_client *client = sensor->i2c_client;
-	u16 patch;
-	int ret;
+	int patch, ret;
 
 	ret = vd55g0_write_array(sensor, VD55G0_REG_FWPATCH_START_ADDR,
 				 sizeof(patch_array), patch_array);
