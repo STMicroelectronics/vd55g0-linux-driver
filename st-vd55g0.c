@@ -315,6 +315,7 @@ struct vd55g0_dev {
 	u16 exposure_target;
 	struct vd55g0_gpios gpios;
 	bool is_slave;
+	bool flash_en;
 };
 
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
@@ -510,6 +511,31 @@ static int vd55g0_wait_state(struct vd55g0_dev *sensor, int state,
 			       timeout_ms);
 }
 
+static int vd55g0_update_gpio_mode(struct vd55g0_dev *sensor, u32 mode,
+					   int gpio)
+{
+	u8 index2val[] = {0x01, 0x02, 0x06, 0x0a};
+
+	return vd55g0_write_reg(sensor, VD55G0_REG_GPIO_0_CTRL + gpio,
+				index2val[mode], NULL);
+}
+
+static int vd55g0_set_gpios_array(struct vd55g0_dev *sensor, u32 *array,
+				  int size, enum vd55g0_gpio_modes mode) {
+	unsigned int i;
+	int ret;
+
+	for (i = 0; i < size;  i++) {
+		if (array[i] == ~0)
+			break;
+		ret = vd55g0_update_gpio_mode(sensor, mode, array[i]);
+		if (ret)
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int vd55g0_apply_exposure_auto(struct vd55g0_dev *sensor) {
 	enum vd55g0_expo_state exp = sensor->expo_state;
 
@@ -579,6 +605,18 @@ static int vd55g0_apply_exposure_target(struct vd55g0_dev *sensor)
 				sensor->exposure_target, NULL);
 }
 
+static int vd55g0_apply_flash(struct vd55g0_dev *sensor)
+{
+	struct vd55g0_gpios *gpios = &sensor->gpios;
+
+	enum vd55g0_gpio_modes mode = sensor->flash_en ?
+				      VD55G0_GPIO_MODE_STROBE :
+				      VD55G0_GPIO_MODE_DISABLED;
+
+	return vd55g0_set_gpios_array(sensor, gpios->leds,
+				      ARRAY_SIZE(gpios->leds), mode);
+}
+
 static int vd55g0_update_exposure_auto(struct vd55g0_dev *sensor, u32 index)
 {
 	int ret;
@@ -615,16 +653,6 @@ static int vd55g0_lock_exposure(struct vd55g0_dev *sensor, struct v4l2_ctrl *ctr
 	if (ret)
 		return ret;
 	return 0;
-}
-
-
-static int vd55g0_update_gpio_mode(struct vd55g0_dev *sensor, u32 mode,
-					   int gpio)
-{
-	u8 index2val[] = {0x01, 0x02, 0x06, 0x0a};
-
-	return vd55g0_write_reg(sensor, VD55G0_REG_GPIO_0_CTRL + gpio,
-				index2val[mode], NULL);
 }
 
 static int vd55g0_get_temp_stream_enable(struct vd55g0_dev *sensor, int *temp)
@@ -738,6 +766,15 @@ static int vd55g0_update_exposure_target(struct vd55g0_dev *sensor, int index)
 	sensor->exposure_target = index2exposure_target[index];
 	if (sensor->streaming)
 		return vd55g0_apply_exposure_target(sensor);
+
+	return 0;
+}
+
+static int vd55g0_update_flash(struct vd55g0_dev *sensor, int flash_en)
+{
+	sensor->flash_en = flash_en;
+	if (sensor->streaming)
+		return vd55g0_apply_flash(sensor);
 
 	return 0;
 }
@@ -888,24 +925,15 @@ static int vd55g0_set_gpios(struct vd55g0_dev *sensor) {
 			return ret;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(gpios->leds);  i++) {
-		if (gpios->leds[i] == ~0)
-			break;
-		ret = vd55g0_update_gpio_mode(sensor,
-					      VD55G0_GPIO_MODE_STROBE,
-					      gpios->leds[i]);
-		if (ret)
-			return -EINVAL;
-	}
-	for (i = 0; i < ARRAY_SIZE(gpios->out_sync);  i++) {
-		if (gpios->out_sync[i] == ~0)
-			break;
-		ret = vd55g0_update_gpio_mode(sensor,
-					      VD55G0_GPIO_MODE_VSYNC_OUT_0,
-					      gpios->out_sync[i]);
-		if (ret)
-			return -EINVAL;
-	}
+	ret = vd55g0_apply_flash(sensor);
+	if (ret)
+		return ret;
+
+	ret = vd55g0_set_gpios_array(sensor, gpios->out_sync,
+				     ARRAY_SIZE(gpios->out_sync),
+				     VD55G0_GPIO_MODE_VSYNC_OUT_0);
+	if (ret)
+		return ret;
 
 	if (!sensor->is_slave)
 		return 0;
@@ -1480,6 +1508,9 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		sensor->is_slave = ctrl->val;
 		ret = 0;
 		break;
+	case V4L2_CID_FLASH_LED_MODE:
+		ret = vd55g0_update_flash(sensor, ctrl->val);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1558,6 +1589,9 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 				 sensor->line_length - cur_mode->width);
 	if (ctrl)
 		ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_FLASH_LED_MODE,
+			       V4L2_FLASH_LED_MODE_FLASH, ~0x7,
+			       V4L2_FLASH_LED_MODE_FLASH);
 
 	/*
 	 * Keep a pointer to these controls as we need to update them when
@@ -1806,6 +1840,7 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->vflip = false;
 	sensor->hflip = false;
 	sensor->darkcal_pedestal = VD55G0_DARKCAL_PEDESTAL_DEF;
+	sensor->flash_en = true;
 
 	sensor->current_mode = &vd55g0_mode_data[VD55G0_DEFAULT_MODE];
 
