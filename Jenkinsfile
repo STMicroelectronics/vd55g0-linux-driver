@@ -3,8 +3,8 @@ pipeline {
 		label 'os-ubuntu2004'
 	}
 	environment {
-		HTTP_PROXY = credentials('proxy')
-		HTTPS_PROXY = credentials('proxy')
+		http_proxy = credentials('proxy')
+		https_proxy = credentials('proxy')
 	}
 
 	stages {
@@ -28,6 +28,10 @@ pipeline {
 			}
 		}
 		stage('Package') {
+			when { anyOf {
+				environment name: 'GIT_BRANCH', value: 'master';
+				environment name: 'GIT_BRANCH', value: 'debian'
+			}}
 			steps {
 				dir('debianizer') {
 					git credentialsId: 'af76724f-9593-4f6c-a5cc-1548eb8b0e14',
@@ -43,38 +47,32 @@ pipeline {
 			}
 		}
 		stage('Upload') {
+			when { anyOf {
+				environment name: 'GIT_BRANCH', value: 'master';
+				environment name: 'GIT_BRANCH', value: 'debian'
+			}}
 			steps {
 				script {
 					if (env.GIT_BRANCH == 'debian') {
 						rtUpload (
-							serverId: 'releases-artifactory-citools-st-com',
+							serverId: 'artifactory-azure',
 							spec: '''{ "files": [ {
 									"pattern": "../st-vd55g0*.deb",
-									"target":
-									"imgappswlinux-codex-st-com/drivers/st-vd55g0/debian/"
+									"target": "imgswlinux-debian-local/pool/st-vd55g0-dkms/stable/",
+									"props": "deb.distribution=stable;deb.component=main;deb.architecture=armhf;deb.architecture=arm64"
 								} ] }'''
 						)
 					} else {
 						rtUpload (
-							serverId: 'snapshots-artifactory-citools-st-com',
+							serverId: 'artifactory-azure',
 							spec: '''{ "files": [ {
 									"pattern": "../st-vd55g0*.deb",
-									"target":
-									"snapshots-imgappswlinux-codex-st-com/drivers/st-vd55g0/debian/"
+									"target": "imgswlinux-debian-local/pool/st-vd55g0-dkms/unstable/",
+									"props": "deb.distribution=unstable;deb.component=main;deb.architecture=armhf;deb.architecture=arm64"
 								} ] }'''
 						)
 					}
 				}
-			}
-		}
-		stage('Publish') {
-			when { environment name: 'GIT_BRANCH', value: 'debian' }
-			steps {
-
-				// Query our aptly repository to update our package
-				sh "curl -X POST -F file=@\$(realpath ../st-vd55g0*.deb) http://10.129.167.70:8081/api/files/tmp"
-				sh "curl -X POST http://10.129.167.70:8081/api/repos/stimglinux-release/file/tmp/\$(basename ../st-vd55g0*.deb)"
-				sh "curl -X PUT http://10.129.167.70:8081/api/publish/:./buster"
 			}
 		}
 	}
