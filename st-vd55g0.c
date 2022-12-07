@@ -1770,19 +1770,19 @@ static int vd55g0_parse_dt_gpios(struct vd55g0_dev *sensor)
 	       ARRAY_SIZE(gpios->out_sync) * sizeof(gpios->out_sync[0]));
 	gpios->in_sync = ~0;
 
-	ret = vd55g0_parse_dt_gpios_array(sensor, "st,led-gpios",
+	ret = vd55g0_parse_dt_gpios_array(sensor, "st,leds",
 					  (u32 *)&gpios->leds,
 					  &nb_gpios_leds);
 	if (ret)
 		return ret;
 
-	ret = vd55g0_parse_dt_gpios_array(sensor, "st,out-sync-gpios",
+	ret = vd55g0_parse_dt_gpios_array(sensor, "st,out-sync",
 					  (u32 *)&gpios->out_sync,
 					  &nb_gpios_out);
 	if (ret)
 		return ret;
 
-	ret = of_property_read_u32(np, "st,in-sync-gpio", &gpios->in_sync);
+	ret = of_property_read_u32(np, "st,in-sync", &gpios->in_sync);
 	if (ret == 0) {
 		if (gpios->in_sync != 0) {
 			dev_err(&client->dev, "input sync gpio must be 0 if present, found %d\n",
