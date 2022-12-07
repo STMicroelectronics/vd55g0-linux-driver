@@ -1,0 +1,21 @@
+.. SPDX-License-Identifier: GPL-2.0
+
+ST VD55G0 camera sensor driver
+==============================
+
+The ST VD55G0 driver implements the following controls:
+
+``V4L2_CID_TEMPERATURE``
+------------------------
+    Read the sensor temperature.
+
+``V4L2_CID_DARKCAL_PEDESTAL``
+-----------------------------
+    Pedestal value used for dark calibration.
+
+``V4L2_CID_SLAVE``
+------------------
+    Enable slave mode. In slave mode the sensor waits for a rising edge on
+    in-sync GPIO to capture a frame.
+    This control is only available when a in-sync GPIO is defined in the device
+    tree.
