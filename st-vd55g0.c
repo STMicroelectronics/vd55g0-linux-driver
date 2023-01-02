@@ -110,7 +110,7 @@
 
 #define VD55G0_WIDTH					644
 #define VD55G0_HEIGHT					604
-#define VD55G0_DEFAULT_MODE				0
+#define VD55G0_DEFAULT_MODE				1
 #define VD55G0_WRITE_MULTIPLE_CHUNK_MAX			16
 #define VD55G0_NB_GPIOS					4
 #define VD55G0_NB_POLARITIES				3
@@ -212,8 +212,6 @@ static const struct vd55g0_fmt_desc vd55g0_supported_codes[] = {
 };
 
 static const struct vd55g0_mode_info vd55g0_mode_data[] = {
-/* Uncomment once frame alignment bug is sorted out */
-#if 0
 	{
 		.width = VD55G0_WIDTH,
 		.height = VD55G0_HEIGHT,
@@ -226,17 +224,16 @@ static const struct vd55g0_mode_info vd55g0_mode_data[] = {
 		},
 	},
 	{
-		.width = VD55G0_WIDTH,
+		.width = 640,
 		.height = 600,
 		.bin_mode = VD55G0_BIN_MODE_NORMAL,
 		.crop = {
-			.left = 0,
+			.left = 2,
 			.top = 2,
-			.width = VD55G0_WIDTH,
+			.width = 640,
 			.height = 600,
 		},
 	},
-#endif
 	{
 		.width = 640,
 		.height = 480,
