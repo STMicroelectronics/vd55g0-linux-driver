@@ -298,7 +298,6 @@ struct vd55g0_dev {
 	bool streaming;
 	struct v4l2_mbus_framefmt fmt;
 	const struct vd55g0_mode_info *current_mode;
-	struct v4l2_fract frame_interval;
 	bool hflip;
 	bool vflip;
 	int manual_expo;
@@ -1858,8 +1857,6 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->fmt.code = MEDIA_BUS_FMT_SGBRG8_1X8;
 	sensor->fmt.field = V4L2_FIELD_NONE;
 	sensor->fmt.colorspace = V4L2_COLORSPACE_SRGB;
-	sensor->frame_interval.numerator = 1;
-	sensor->frame_interval.denominator = 15;
 	sensor->manual_expo = VD55G0_EXPO_DEF;
 	sensor->vflip = false;
 	sensor->hflip = false;
