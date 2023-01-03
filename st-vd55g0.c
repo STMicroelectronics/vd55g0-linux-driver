@@ -139,7 +139,7 @@ static const char * const vd55g0_test_pattern_menu[] = {
 
 static const s64 vd55g0_ev_bias_menu[] = {
 	-3000, -2500, -2000, -1500, -1000, -500,
-	0,
+	    0,
 	  500,  1000,  1500,  2000,  2500, 3000,
 };
 
