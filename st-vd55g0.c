@@ -568,12 +568,6 @@ static int vd55g0_get_regulators(struct vd55g0_dev *sensor)
 				       sensor->supplies);
 }
 
-static int vd55g0_apply_exposure(struct vd55g0_dev *sensor)
-{
-	return vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_COARSE_EXPOSURE,
-				 sensor->manual_expo, NULL);
-}
-
 static int vd55g0_apply_patgen(struct vd55g0_dev *sensor)
 {
 	static const u8 index2val[] = {
@@ -602,18 +596,6 @@ static int vd55g0_apply_patgen(struct vd55g0_dev *sensor)
 		return ret;
 
 	return vd55g0_write_reg(sensor, VD55G0_REG_PATGEN_CTRL, reg, NULL);
-}
-
-static int vd55g0_apply_darkcal_pedestal(struct vd55g0_dev *sensor)
-{
-	return vd55g0_write_reg(sensor, VD55G0_REG_DARKCAL_PEDESTAL,
-				 sensor->darkcal_pedestal, NULL);
-}
-
-static int vd55g0_apply_exposure_target(struct vd55g0_dev *sensor)
-{
-	return vd55g0_write_reg(sensor, VD55G0_REG_AE_TARGET_PERCENTAGE,
-				sensor->exposure_target, NULL);
 }
 
 static int vd55g0_apply_flash(struct vd55g0_dev *sensor)
@@ -750,7 +732,9 @@ static int vd55g0_update_exposure(struct vd55g0_dev *sensor, int expo_ms)
 {
 	sensor->manual_expo = expo_ms;
 	if (sensor->streaming)
-		return vd55g0_apply_exposure(sensor);
+		return vd55g0_write_reg(sensor,
+					VD55G0_REG_MANUAL_COARSE_EXPOSURE,
+					sensor->manual_expo, NULL);
 
 	return 0;
 }
@@ -760,7 +744,8 @@ static int vd55g0_update_darkcal_pedestal(struct vd55g0_dev *sensor,
 {
 	sensor->darkcal_pedestal = pedestal;
 	if (sensor->streaming)
-		return vd55g0_apply_darkcal_pedestal(sensor);
+		return vd55g0_write_reg(sensor, VD55G0_REG_DARKCAL_PEDESTAL,
+					sensor->darkcal_pedestal, NULL);
 
 	return 0;
 }
@@ -777,7 +762,8 @@ static int vd55g0_update_exposure_target(struct vd55g0_dev *sensor, int index)
 
 	sensor->exposure_target = index2exposure_target[index];
 	if (sensor->streaming)
-		return vd55g0_apply_exposure_target(sensor);
+		return vd55g0_write_reg(sensor, VD55G0_REG_AE_TARGET_PERCENTAGE,
+					sensor->exposure_target, NULL);
 
 	return 0;
 }
@@ -870,16 +856,12 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	ret = vd55g0_apply_exposure(sensor);
-	if (ret)
-		return ret;
-
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_ANALOG_GAIN,
-			       sensor->analog_gain, NULL);
-	if (ret)
-		return ret;
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
-			       sensor->digital_gain, NULL);
+	vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_COARSE_EXPOSURE,
+			 sensor->manual_expo, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_ANALOG_GAIN,
+			       sensor->analog_gain, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
+			       sensor->digital_gain, &ret);
 	if (ret)
 		return ret;
 
@@ -887,8 +869,10 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	ret = vd55g0_write_reg(sensor, VD55G0_REG_ORIENTATION,
-			       sensor->hflip | (sensor->vflip << 1), NULL);
+	vd55g0_write_reg(sensor, VD55G0_REG_ORIENTATION,
+			 sensor->hflip | (sensor->vflip << 1), &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_DARKCAL_PEDESTAL,
+			 sensor->darkcal_pedestal, &ret);
 	if (ret)
 		return ret;
 
@@ -896,9 +880,6 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	ret = vd55g0_apply_darkcal_pedestal(sensor);
-	if (ret)
-		return ret;
 
 	return 0;
 }
