@@ -75,6 +75,12 @@
 #define VD55G0_REG_MANUAL_ANALOG_GAIN			VD55G0_REG_8BIT(0x044d)
 #define VD55G0_REG_MANUAL_COARSE_EXPOSURE		VD55G0_REG_16BIT(0x044e)
 #define VD55G0_REG_MANUAL_DIGITAL_GAIN			VD55G0_REG_16BIT(0x0450)
+#define VD55G0_REG_APPLIED_COARSE_EXPOSURE		VD55G0_REG_16BIT(0x0064)
+#define VD55G0_REG_APPLIED_ANALOG_GAIN			VD55G0_REG_8BIT(0x0066)
+#define VD55G0_REG_APPLIED_DIGITAL_GAIN			VD55G0_REG_16BIT(0x0068)
+#define VD55G0_REG_AE_COLDSTART_COARSE_EXPOSURE		VD55G0_REG_16BIT(0x042e)
+#define VD55G0_REG_AE_COLDSTART_ANALOG_GAIN		VD55G0_REG_8BIT(0x0430)
+#define VD55G0_REG_AE_COLDSTART_DIGITAL_GAIN		VD55G0_REG_16BIT(0x0432)
 #define VD55G0_REG_EXP_MODE				VD55G0_REG_8BIT(0x044c)
 #define VD55G0_EXP_MODE_AUTO				0
 #define VD55G0_EXP_MODE_FREEZE				1
@@ -300,7 +306,7 @@ struct vd55g0_dev {
 	const struct vd55g0_mode_info *current_mode;
 	bool hflip;
 	bool vflip;
-	int manual_expo;
+	u16 manual_expo;
 	enum vd55g0_expo_state expo_state;
 	u16 digital_gain;
 	u8 analog_gain;
@@ -314,6 +320,11 @@ struct vd55g0_dev {
 	struct vd55g0_gpios gpios;
 	bool is_slave;
 	bool flash_en;
+	struct {
+		u16 expo;
+		u16 digital_gain;
+		u8 analog_gain;
+	} cold_start;
 };
 
 static inline struct vd55g0_dev *to_vd55g0_dev(struct v4l2_subdev *sd)
@@ -833,6 +844,20 @@ static int vd55g0_try_fmt_internal(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int vd55g0_apply_cold_start(struct vd55g0_dev *sensor)
+{
+	int ret = 0;
+
+	vd55g0_write_reg(sensor, VD55G0_REG_AE_COLDSTART_COARSE_EXPOSURE,
+			 sensor->cold_start.expo, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_AE_COLDSTART_ANALOG_GAIN,
+			 sensor->cold_start.analog_gain, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_AE_COLDSTART_DIGITAL_GAIN,
+			 sensor->cold_start.digital_gain, &ret);
+
+	return ret;
+}
+
 static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 {
 	int ret;
@@ -855,6 +880,10 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 		return ret;
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
 			       sensor->digital_gain, NULL);
+	if (ret)
+		return ret;
+
+	ret = vd55g0_apply_cold_start(sensor);
 	if (ret)
 		return ret;
 
@@ -1003,10 +1032,25 @@ err_rpm_put:
 	return ret;
 }
 
+static void vd55g0_save_exposure(struct vd55g0_dev *sensor)
+{
+	int ret;
+
+	ret = vd55g0_read_reg(sensor, VD55G0_REG_APPLIED_COARSE_EXPOSURE);
+	sensor->cold_start.expo = ret < 0 ? 0 : ret;
+	ret = vd55g0_read_reg(sensor, VD55G0_REG_APPLIED_DIGITAL_GAIN);
+	sensor->cold_start.digital_gain = ret < 0 ? 0 : ret;
+	ret = vd55g0_read_reg(sensor, VD55G0_REG_APPLIED_ANALOG_GAIN);
+	sensor->cold_start.analog_gain = ret < 0 ? 0 : ret;
+}
+
 static int vd55g0_stream_disable(struct vd55g0_dev *sensor)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(&sensor->sd);
 	int ret;
+
+	/* Keep exposure values for next cold start boot */
+	vd55g0_save_exposure(sensor);
 
 	ret = vd55g0_write_reg(sensor, VD55G0_REG_STREAMING,
 			       VD55G0_STREAMING_STOP_STREAM, NULL);
@@ -1862,6 +1906,9 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->hflip = false;
 	sensor->darkcal_pedestal = VD55G0_DARKCAL_PEDESTAL_DEF;
 	sensor->flash_en = true;
+	sensor->cold_start.expo = 0x32;
+	sensor->cold_start.digital_gain = 256;
+	sensor->cold_start.analog_gain = 0;
 
 	sensor->current_mode = &vd55g0_mode_data[VD55G0_DEFAULT_MODE];
 
