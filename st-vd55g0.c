@@ -119,6 +119,8 @@
 #define VD55G0_TIMEOUT_MS				500
 #define VD55G0_MEDIA_BUS_FMT_DEF			MEDIA_BUS_FMT_Y8_1X8
 #define VD55G0_DARKCAL_PEDESTAL_DEF			0x40
+#define VD55G0_EXPO_MAX_TERM				64
+#define VD55G0_EXPO_DEF					200
 
 #define V4L2_CID_TEMPERATURE			(V4L2_CID_USER_BASE | 0x1020)
 #define V4L2_CID_DARKCAL_PEDESTAL		(V4L2_CID_USER_BASE | 0x1021)
@@ -292,6 +294,7 @@ struct vd55g0_dev {
 	struct v4l2_ctrl *hflip_ctrl;
 	struct v4l2_ctrl *pattern_ctrl;
 	struct v4l2_ctrl *slave_ctrl;
+	struct v4l2_ctrl *expo_ctrl;
 	bool streaming;
 	struct v4l2_mbus_framefmt fmt;
 	const struct vd55g0_mode_info *current_mode;
@@ -1311,6 +1314,7 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
 	const struct vd55g0_mode_info *new_mode;
 	struct v4l2_mbus_framefmt *fmt;
+	unsigned int expo_max;
 	int ret;
 
 	mutex_lock(&sensor->lock);
@@ -1351,6 +1355,10 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 					 0xffff - new_mode->crop.height,
 					 1, sensor->vblank);
 		__v4l2_ctrl_s_ctrl(sensor->vblank_ctrl, sensor->vblank);
+		/* Max exposure changes with vblank */
+		expo_max = sensor->frame_length - VD55G0_EXPO_MAX_TERM;
+		__v4l2_ctrl_modify_range(sensor->expo_ctrl, 0, expo_max, 1,
+					 VD55G0_EXPO_DEF);
 	}
 
 out:
@@ -1454,6 +1462,7 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct v4l2_subdev *sd = ctrl_to_sd(ctrl);
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
+	unsigned int expo_max;
 	int ret;
 
 	switch (ctrl->id) {
@@ -1494,6 +1503,10 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_VBLANK:
 		ret = vd55g0_update_vblank(sensor, ctrl->val);
+		/* Max exposure changes with vblank */
+		expo_max = sensor->frame_length - VD55G0_EXPO_MAX_TERM;
+		__v4l2_ctrl_modify_range(sensor->expo_ctrl, 0, expo_max, 1,
+					 VD55G0_EXPO_DEF);
 		break;
 	case V4L2_CID_AUTO_EXPOSURE_BIAS:
 		/*
@@ -1579,7 +1592,6 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 			  sensor->analog_gain);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN, 256, 2048, 1,
 			  sensor->digital_gain);
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 0, 0xffff, 1, 10);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_3A_LOCK, 0, 1, 0, 0);
 	ctrl = v4l2_ctrl_new_custom(hdl, &vd55g0_temp_ctrl, NULL);
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
@@ -1617,6 +1629,10 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 					     vd55g0_test_pattern_menu);
 	sensor->slave_ctrl = v4l2_ctrl_new_custom(hdl, &vd55g0_slave_ctrl,
 						  NULL);
+	sensor->expo_ctrl =
+		v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 0,
+				  sensor->frame_length - VD55G0_EXPO_MAX_TERM,
+				  1, VD55G0_EXPO_DEF);
 	/* Disable this control if not possible by device tree */
 	if (!vd55g0_can_be_slave(sensor)) {
 		v4l2_ctrl_s_ctrl(sensor->slave_ctrl, false);
@@ -1844,7 +1860,7 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->fmt.colorspace = V4L2_COLORSPACE_SRGB;
 	sensor->frame_interval.numerator = 1;
 	sensor->frame_interval.denominator = 15;
-	sensor->manual_expo = 200;
+	sensor->manual_expo = VD55G0_EXPO_DEF;
 	sensor->vflip = false;
 	sensor->hflip = false;
 	sensor->darkcal_pedestal = VD55G0_DARKCAL_PEDESTAL_DEF;
