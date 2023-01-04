@@ -1,3 +1,9 @@
+st-vd55g0-dkms (0.4-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Benjamin Mugnier <benjamin.mugnier@st.com>  Wed, 04 Jan 2023 10:36:33 +0100
+
 st-vd55g0-dkms (0.3-1) unstable; urgency=medium
 
   * New upstream release
