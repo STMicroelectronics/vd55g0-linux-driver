@@ -7,7 +7,7 @@
 
 #include <linux/version.h>
 
-#include <asm-generic/unaligned.h>
+#include <asm/unaligned.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
