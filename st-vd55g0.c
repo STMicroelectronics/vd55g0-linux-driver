@@ -298,6 +298,7 @@ struct vd55g0_dev {
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct v4l2_ctrl *pixel_rate_ctrl;
 	struct v4l2_ctrl *vblank_ctrl;
+	struct v4l2_ctrl *hblank_ctrl;
 	struct v4l2_ctrl *vflip_ctrl;
 	struct v4l2_ctrl *hflip_ctrl;
 	struct v4l2_ctrl *pattern_ctrl;
@@ -1340,7 +1341,7 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
 	const struct vd55g0_mode_info *new_mode;
 	struct v4l2_mbus_framefmt *fmt;
-	unsigned int expo_max;
+	unsigned int expo_max, hblank;
 	int ret;
 
 	mutex_lock(&sensor->lock);
@@ -1385,6 +1386,11 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 		expo_max = sensor->frame_length - VD55G0_EXPO_MAX_TERM;
 		__v4l2_ctrl_modify_range(sensor->expo_ctrl, 0, expo_max, 1,
 					 VD55G0_EXPO_DEF);
+		/* Update hblank according to new width */
+		hblank = sensor->line_length - sensor->current_mode->width;
+		__v4l2_ctrl_modify_range(sensor->hblank_ctrl, hblank, hblank, 1,
+					 hblank);
+		ret = __v4l2_ctrl_s_ctrl(sensor->hblank_ctrl, hblank);
 	}
 
 out:
@@ -1534,6 +1540,10 @@ static int vd55g0_s_ctrl(struct v4l2_ctrl *ctrl)
 		__v4l2_ctrl_modify_range(sensor->expo_ctrl, 0, expo_max, 1,
 					 VD55G0_EXPO_DEF);
 		break;
+	case V4L2_CID_HBLANK:
+		/* Read only control, can only be activated by V4L2 framework */
+		ret = 0;
+		break;
 	case V4L2_CID_AUTO_EXPOSURE_BIAS:
 		/*
 		 * We use auto exposure target percentage register to control
@@ -1600,6 +1610,7 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	const struct vd55g0_mode_info *cur_mode = sensor->current_mode;
 	struct v4l2_ctrl *ctrl;
 	unsigned int patgen_size = ARRAY_SIZE(vd55g0_test_pattern_menu) - 1;
+	unsigned int hblank;
 	int ret;
 
 	v4l2_ctrl_handler_init(hdl, 16);
@@ -1622,11 +1633,6 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	ctrl = v4l2_ctrl_new_custom(hdl, &vd55g0_temp_ctrl, NULL);
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY;
 	v4l2_ctrl_new_custom(hdl, &vd55g0_darkcal_pedestal_ctrl, NULL);
-	ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK, 0,
-				 sensor->line_length, 1,
-				 sensor->line_length - cur_mode->width);
-	if (ctrl)
-		ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_FLASH_LED_MODE,
 			       V4L2_FLASH_LED_MODE_FLASH, ~0x7,
 			       V4L2_FLASH_LED_MODE_FLASH);
@@ -1645,6 +1651,11 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 						sensor->vblank_min,
 						0xffff - cur_mode->crop.height,
 						1, sensor->vblank);
+	hblank = sensor->line_length - sensor->current_mode->width;
+	sensor->hblank_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK,
+						hblank, hblank, 1, hblank);
+	if (sensor->hblank_ctrl)
+		sensor->hblank_ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 	sensor->vflip_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP,
 					       0, 1, 1, sensor->vflip);
 	sensor->hflip_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP,
