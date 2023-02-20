@@ -1671,15 +1671,16 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 		v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 0,
 				  sensor->frame_length - VD55G0_EXPO_MAX_TERM,
 				  1, VD55G0_EXPO_DEF);
-	/* Disable this control if not possible by device tree */
-	if (!vd55g0_can_be_slave(sensor)) {
-		v4l2_ctrl_s_ctrl(sensor->slave_ctrl, false);
-		v4l2_ctrl_grab(sensor->slave_ctrl, true);
-	}
 
 	if (hdl->error) {
 		ret = hdl->error;
 		goto free_ctrls;
+	}
+
+	/* Disable this control if not possible by device tree */
+	if (!vd55g0_can_be_slave(sensor)) {
+		v4l2_ctrl_s_ctrl(sensor->slave_ctrl, false);
+		v4l2_ctrl_grab(sensor->slave_ctrl, true);
 	}
 
 	sensor->sd.ctrl_handler = hdl;
