@@ -2014,7 +2014,11 @@ error_power_off:
 	return ret;
 }
 
+#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
 static int vd55g0_remove(struct i2c_client *client)
+#else
+static void vd55g0_remove(struct i2c_client *client)
+#endif
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
@@ -2027,8 +2031,9 @@ static int vd55g0_remove(struct i2c_client *client)
 	if (!pm_runtime_status_suspended(&client->dev))
 		vd55g0_power_off(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
-
+#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
 	return 0;
+#endif
 }
 
 static const struct of_device_id vd55g0_dt_ids[] = {
