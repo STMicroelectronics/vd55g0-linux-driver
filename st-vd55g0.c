@@ -123,7 +123,7 @@
 #define VD55G0_NB_GPIOS					4
 #define VD55G0_NB_POLARITIES				3
 #define VD55G0_MIN_FRAME_LENGTH				(605 + 76)
-#define VD55G0_FRAME_LENGTH_DEF				1980 /* 60 fps */
+#define VD55G0_FRAME_LENGTH_DEF				1860 /* 60 fps */
 #define VD55G0_TIMEOUT_MS				500
 #define VD55G0_MEDIA_BUS_FMT_DEF			MEDIA_BUS_FMT_Y8_1X8
 #define VD55G0_DARKCAL_PEDESTAL_DEF			0x40
@@ -1671,15 +1671,16 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 		v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 0,
 				  sensor->frame_length - VD55G0_EXPO_MAX_TERM,
 				  1, VD55G0_EXPO_DEF);
-	/* Disable this control if not possible by device tree */
-	if (!vd55g0_can_be_slave(sensor)) {
-		v4l2_ctrl_s_ctrl(sensor->slave_ctrl, false);
-		v4l2_ctrl_grab(sensor->slave_ctrl, true);
-	}
 
 	if (hdl->error) {
 		ret = hdl->error;
 		goto free_ctrls;
+	}
+
+	/* Disable this control if not possible by device tree */
+	if (!vd55g0_can_be_slave(sensor)) {
+		v4l2_ctrl_s_ctrl(sensor->slave_ctrl, false);
+		v4l2_ctrl_grab(sensor->slave_ctrl, true);
 	}
 
 	sensor->sd.ctrl_handler = hdl;
@@ -2013,7 +2014,11 @@ error_power_off:
 	return ret;
 }
 
+#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
 static int vd55g0_remove(struct i2c_client *client)
+#else
+static void vd55g0_remove(struct i2c_client *client)
+#endif
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
@@ -2026,8 +2031,9 @@ static int vd55g0_remove(struct i2c_client *client)
 	if (!pm_runtime_status_suspended(&client->dev))
 		vd55g0_power_off(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
-
+#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
 	return 0;
+#endif
 }
 
 static const struct of_device_id vd55g0_dt_ids[] = {
