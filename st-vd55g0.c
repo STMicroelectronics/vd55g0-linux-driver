@@ -864,9 +864,9 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_COARSE_EXPOSURE,
 			 sensor->manual_expo, &ret);
 	vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_ANALOG_GAIN,
-			       sensor->analog_gain, &ret);
+			 sensor->analog_gain, &ret);
 	vd55g0_write_reg(sensor, VD55G0_REG_MANUAL_DIGITAL_GAIN,
-			       sensor->digital_gain, &ret);
+			 sensor->digital_gain, &ret);
 	if (ret)
 		return ret;
 
@@ -884,7 +884,6 @@ static int vd55g0_apply_settings(struct vd55g0_dev *sensor)
 	ret = vd55g0_apply_patgen(sensor);
 	if (ret)
 		return ret;
-
 
 	return 0;
 }
