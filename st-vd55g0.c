@@ -1610,7 +1610,9 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	const struct vd55g0_mode_info *cur_mode = sensor->current_mode;
 	struct v4l2_ctrl *ctrl;
 	unsigned int patgen_size = ARRAY_SIZE(vd55g0_test_pattern_menu) - 1;
-	unsigned int hblank;
+	unsigned int hblank = sensor->line_length - sensor->current_mode->width;
+	unsigned int expo_mode = sensor->expo_state == VD55G0_EXP_AUTO ?
+		V4L2_EXPOSURE_AUTO :  V4L2_EXPOSURE_MANUAL;
 	int ret;
 
 	v4l2_ctrl_handler_init(hdl, 16);
@@ -1624,7 +1626,7 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 				      ARRAY_SIZE(link_freq) - 1, 0, link_freq);
 	ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_EXPOSURE_AUTO, 1, ~0x3,
-			       V4L2_EXPOSURE_AUTO);
+			       expo_mode);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN, 0, 24, 1,
 			  sensor->analog_gain);
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_DIGITAL_GAIN, 256, 2048, 1,
@@ -1635,7 +1637,7 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	v4l2_ctrl_new_custom(hdl, &vd55g0_darkcal_pedestal_ctrl, NULL);
 	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_FLASH_LED_MODE,
 			       V4L2_FLASH_LED_MODE_FLASH, ~0x7,
-			       V4L2_FLASH_LED_MODE_FLASH);
+			       sensor->flash_en);
 
 	/*
 	 * Keep a pointer to these controls as we need to update them when
@@ -1651,7 +1653,6 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 						sensor->vblank_min,
 						0xffff - cur_mode->crop.height,
 						1, sensor->vblank);
-	hblank = sensor->line_length - sensor->current_mode->width;
 	sensor->hblank_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK,
 						hblank, hblank, 1, hblank);
 	if (sensor->hblank_ctrl)
@@ -1669,7 +1670,7 @@ static int vd55g0_init_controls(struct vd55g0_dev *sensor)
 	sensor->expo_ctrl =
 		v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE, 0,
 				  sensor->frame_length - VD55G0_EXPO_MAX_TERM,
-				  1, VD55G0_EXPO_DEF);
+				  1, sensor->manual_expo);
 
 	if (hdl->error) {
 		ret = hdl->error;
@@ -1900,7 +1901,7 @@ static int vd55g0_probe(struct i2c_client *client)
 	sensor->vflip = false;
 	sensor->hflip = false;
 	sensor->darkcal_pedestal = VD55G0_DARKCAL_PEDESTAL_DEF;
-	sensor->flash_en = true;
+	sensor->flash_en = false;
 	sensor->cold_start.expo = 0x32;
 	sensor->cold_start.digital_gain = 256;
 	sensor->cold_start.analog_gain = 0;
