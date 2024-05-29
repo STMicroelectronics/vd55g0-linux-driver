@@ -206,21 +206,6 @@ static const struct vd55g0_fmt_desc vd55g0_supported_codes[] = {
 		.bpp = 10,
 		.data_type = MIPI_CSI2_DT_RAW10,
 	},
-	/*
-	 * The sensor is monochrome, but on some platforms such as the db410c
-	 * the media pipeline does not support Y* formats. Trick it by sending
-	 * it a bayer format instead.
-	 */
-	{
-		.code = MEDIA_BUS_FMT_SGBRG8_1X8,
-		.bpp = 8,
-		.data_type = MIPI_CSI2_DT_RAW8,
-	},
-	{
-		.code = MEDIA_BUS_FMT_SGBRG10_1X10,
-		.bpp = 10,
-		.data_type = MIPI_CSI2_DT_RAW10,
-	},
 };
 
 static const struct vd55g0_mode_info vd55g0_mode_data[] = {
