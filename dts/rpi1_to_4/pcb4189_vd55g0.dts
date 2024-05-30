@@ -57,7 +57,6 @@
 				VANA-supply = <&v2v8>;
 
 				reset-gpios = <&gpio 5 1>;
-				st,leds = <2>;
 
 				port {
 					foxy_ep: endpoint {
@@ -67,6 +66,7 @@
 						clock-noncontinuous;
 						link-frequencies =
 							/bits/ 64 <201000000 402000000 804000000>;
+						lane-polarities = <1 1>;
 					};
 				};
 			};
