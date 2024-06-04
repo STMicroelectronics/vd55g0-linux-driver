@@ -25,7 +25,7 @@
 #include <media/v4l2-subdev.h>
 
 /* Backward compatibility */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 18, 0)
+#if KERNEL_VERSION(5, 18, 0) > LINUX_VERSION_CODE
 #define MIPI_CSI2_DT_RAW8	0x2a
 #define MIPI_CSI2_DT_RAW10	0x2b
 #define MIPI_CSI2_DT_RAW12	0x2c
@@ -35,7 +35,7 @@
 #include <media/mipi-csi2.h>
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+#if KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
 #define HZ_PER_MHZ		1000000UL
 #else
 #include <linux/units.h>
@@ -483,7 +483,7 @@ static int vd55g0_poll_reg(struct vd55g0_dev *sensor, u32 reg, u8 poll_val,
 {
 	const unsigned int loop_delay_ms = 10;
 	int ret;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+#if KERNEL_VERSION(5, 7, 0) > LINUX_VERSION_CODE
 	int loop_nb = timeout_ms / loop_delay_ms;
 
 	while (--loop_nb) {
@@ -1054,7 +1054,7 @@ static int vd55g0_tx_from_ep(struct vd55g0_dev *sensor,
 	int p, l;
 	int i;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
+#if KERNEL_VERSION(4, 20, 0) > LINUX_VERSION_CODE
 	ep = v4l2_fwnode_endpoint_alloc_parse(handle);
 #else
 	struct v4l2_fwnode_endpoint ep_node = { .bus_type =
@@ -1242,7 +1242,7 @@ static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 }
 
 static int vd55g0_get_selection(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 				struct v4l2_subdev_pad_config *cfg,
 #else
 				struct v4l2_subdev_state *sd_state,
@@ -1269,7 +1269,7 @@ static int vd55g0_get_selection(struct v4l2_subdev *sd,
 }
 
 static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 				 struct v4l2_subdev_pad_config *cfg,
 #else
 				 struct v4l2_subdev_state *sd_state,
@@ -1285,7 +1285,7 @@ static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
 }
 
 static int vd55g0_get_fmt(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 			  struct v4l2_subdev_pad_config *cfg,
 #else
 			  struct v4l2_subdev_state *sd_state,
@@ -1298,7 +1298,7 @@ static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 	mutex_lock(&sensor->lock);
 
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(&sensor->sd, cfg,
 						 format->pad);
 #else
@@ -1316,7 +1316,7 @@ static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 }
 
 static int vd55g0_set_fmt(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 			  struct v4l2_subdev_pad_config *cfg,
 #else
 			  struct v4l2_subdev_state *sd_state,
@@ -1341,7 +1341,7 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 		goto out;
 
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(sd, cfg, 0);
 #else
 		fmt = v4l2_subdev_get_try_format(sd, sd_state, 0);
@@ -1385,7 +1385,7 @@ out:
 }
 
 static int vd55g0_init_cfg(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 			   struct v4l2_subdev_pad_config *cfg
 #else
 			   struct v4l2_subdev_state *sd_state
@@ -1398,7 +1398,7 @@ static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 	vd55g0_fill_framefmt(sensor, sensor->current_mode, &fmt.format,
 			     VD55G0_MEDIA_BUS_FMT_DEF);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 	return vd55g0_set_fmt(sd, cfg, &fmt);
 #else
 	return vd55g0_set_fmt(sd, sd_state, &fmt);
@@ -1406,7 +1406,7 @@ static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 }
 
 static int vd55g0_enum_frame_size(struct v4l2_subdev *sd,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+#if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 				  struct v4l2_subdev_pad_config *cfg,
 #else
 				  struct v4l2_subdev_state *sd_state,
@@ -1999,7 +1999,7 @@ error_power_off:
 	return ret;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
 static int vd55g0_remove(struct i2c_client *client)
 #else
 static void vd55g0_remove(struct i2c_client *client)
@@ -2016,7 +2016,7 @@ static void vd55g0_remove(struct i2c_client *client)
 	if (!pm_runtime_status_suspended(&client->dev))
 		vd55g0_power_off(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
 	return 0;
 #endif
 }
@@ -2037,7 +2037,7 @@ static struct i2c_driver vd55g0_i2c_driver = {
 		.of_match_table = vd55g0_dt_ids,
 		.pm = &vd55g0_pm_ops,
 	},
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 3, 0)
+#if KERNEL_VERSION(6, 3, 0) > LINUX_VERSION_CODE
 	.probe_new = vd55g0_probe,
 #else
 	.probe = vd55g0_probe,
