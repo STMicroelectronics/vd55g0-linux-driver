@@ -902,11 +902,11 @@ static int vd55g0_apply_frame_format(struct vd55g0_dev *sensor)
 	 * Only aquire lines required for this image format, optimizing power
 	 * usage
 	 */
-#if 0
-	vd55g0_write_reg(sensor, VD55G0_REG_Y_START, crop->top - 50, &ret);
-	vd55g0_write_reg(sensor, VD55G0_REG_Y_END,
-			 crop->top + crop->height - 1, &ret);
-#endif
+/*
+ *	vd55g0_write_reg(sensor, VD55G0_REG_Y_START, crop->top - 50, &ret);
+ *	vd55g0_write_reg(sensor, VD55G0_REG_Y_END,
+ *			 crop->top + crop->height - 1, &ret);
+ */
 
 	return ret;
 }
@@ -1195,7 +1195,8 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 	sensor->line_length = VD55G0_LINE_LENGTH_FAST;
 	if (mipi_bps < 900 * HZ_PER_MHZ)
 		sensor->line_length = VD55G0_LINE_LENGTH_SLOW;
-	vd55g0_write_reg(sensor, VD55G0_REG_LINE_LENGTH, sensor->line_length, &ret);
+	vd55g0_write_reg(sensor, VD55G0_REG_LINE_LENGTH, sensor->line_length,
+			 &ret);
 
 	/*
 	 * PLL_PREDIV and PLL_MULT are not accessible. We rely on the firmware
@@ -1241,13 +1242,15 @@ static int vd55g0_s_stream(struct v4l2_subdev *sd, int enable)
 	return ret;
 }
 
-static int vd55g0_get_selection(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+static int vd55g0_get_selection(struct v4l2_subdev *sd,
 				struct v4l2_subdev_pad_config *cfg,
-#else
-				struct v4l2_subdev_state *sd_state,
-#endif
 				struct v4l2_subdev_selection *sel)
+#else
+static int vd55g0_get_selection(struct v4l2_subdev *sd,
+				struct v4l2_subdev_state *sd_state,
+				struct v4l2_subdev_selection *sel)
+#endif
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
 
@@ -1268,13 +1271,15 @@ static int vd55g0_get_selection(struct v4l2_subdev *sd,
 	return -EINVAL;
 }
 
-static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
 				 struct v4l2_subdev_pad_config *cfg,
-#else
-				 struct v4l2_subdev_state *sd_state,
-#endif
 				 struct v4l2_subdev_mbus_code_enum *code)
+#else
+static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
+				 struct v4l2_subdev_state *sd_state,
+				 struct v4l2_subdev_mbus_code_enum *code)
+#endif
 {
 	if (code->index >= ARRAY_SIZE(vd55g0_supported_codes))
 		return -EINVAL;
@@ -1284,13 +1289,15 @@ static int vd55g0_enum_mbus_code(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 			  struct v4l2_subdev_pad_config *cfg,
-#else
-			  struct v4l2_subdev_state *sd_state,
-#endif
 			  struct v4l2_subdev_format *format)
+#else
+static int vd55g0_get_fmt(struct v4l2_subdev *sd,
+			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_format *format)
+#endif
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
 	struct v4l2_mbus_framefmt *fmt;
@@ -1315,13 +1322,15 @@ static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 			  struct v4l2_subdev_pad_config *cfg,
-#else
-			  struct v4l2_subdev_state *sd_state,
-#endif
 			  struct v4l2_subdev_format *format)
+#else
+static int vd55g0_set_fmt(struct v4l2_subdev *sd,
+			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_format *format)
+#endif
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
 	const struct vd55g0_mode_info *new_mode;
@@ -1384,13 +1393,13 @@ out:
 	return ret;
 }
 
-static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
-			   struct v4l2_subdev_pad_config *cfg
+static int vd55g0_init_cfg(struct v4l2_subdev *sd,
+			   struct v4l2_subdev_pad_config *cfg)
 #else
-			   struct v4l2_subdev_state *sd_state
+static int vd55g0_init_cfg(struct v4l2_subdev *sd,
+			   struct v4l2_subdev_state *sd_state)
 #endif
-			   )
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
 	struct v4l2_subdev_format fmt = { 0 };
@@ -1405,13 +1414,15 @@ static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 #endif
 }
 
-static int vd55g0_enum_frame_size(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
+static int vd55g0_enum_frame_size(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_pad_config *cfg,
-#else
-				  struct v4l2_subdev_state *sd_state,
-#endif
 				  struct v4l2_subdev_frame_size_enum *fse)
+#else
+static int vd55g0_enum_frame_size(struct v4l2_subdev *sd,
+				  struct v4l2_subdev_state *sd_state,
+				  struct v4l2_subdev_frame_size_enum *fse)
+#endif
 {
 	if (fse->index >= ARRAY_SIZE(vd55g0_mode_data))
 		return -EINVAL;
