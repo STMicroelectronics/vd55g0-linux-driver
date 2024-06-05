@@ -46,7 +46,7 @@
 
 			foxy: foxy@10 {
 				status = "ok";
-				compatible = "st,st-vd55g0";
+				compatible = "st,vd55g0";
 				reg = <0x10>;
 
 				clocks = <&camera_clk_12M>;

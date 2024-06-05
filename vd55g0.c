@@ -136,7 +136,7 @@
 #define V4L2_CID_DARKCAL_PEDESTAL		(V4L2_CID_USER_BASE | 0x1021)
 #define V4L2_CID_SLAVE				(V4L2_CID_USER_BASE | 0x1022)
 
-#include "st-vd55g0_patch.c"
+#include "vd55g0_patch.c"
 
 static const char * const vd55g0_test_pattern_menu[] = {
 	"Disabled",
@@ -2033,7 +2033,7 @@ static void vd55g0_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id vd55g0_dt_ids[] = {
-	{ .compatible = "st,st-vd55g0" },
+	{ .compatible = "st,vd55g0" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, vd55g0_dt_ids);
@@ -2044,7 +2044,7 @@ static const struct dev_pm_ops vd55g0_pm_ops = {
 
 static struct i2c_driver vd55g0_i2c_driver = {
 	.driver = {
-		.name  = "st-vd55g0",
+		.name  = "vd55g0",
 		.of_match_table = vd55g0_dt_ids,
 		.pm = &vd55g0_pm_ops,
 	},

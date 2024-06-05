@@ -1,4 +1,4 @@
-# ST-VD55G0 Linux driver
+# ST VD55G0 Linux driver
 
 ## Installation
 
@@ -13,7 +13,7 @@ make
 Place it in the kernel modules folder.
 
 ```
-sudo cp st-vd55g0.ko /lib/modules/$(uname -r)
+sudo cp vd55g0.ko /lib/modules/$(uname -r)
 ```
 
 Resolve modules dependencies.

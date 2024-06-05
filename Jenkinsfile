@@ -79,13 +79,13 @@ pipeline {
 							spec: '''{
 								"files": [
 									{
-										"pattern": "st-vd55g0*.deb",
-										"target": "imgswlinux-debian-local/pool/st-vd55g0-dkms/stable/",
+										"pattern": "vd55g0*.deb",
+										"target": "imgswlinux-debian-local/pool/vd55g0-dkms/stable/",
 										"props": "deb.distribution=stable;deb.component=main;deb.architecture=armhf;deb.architecture=arm64"
 									},
 									{
-										"pattern": "st-vd55g0*.zip",
-										"target": "imgswlinux-releases-imgappswlinux-codex-st-com/drivers/st-vd55g0/stable/"
+										"pattern": "vd55g0*.zip",
+										"target": "imgswlinux-releases-imgappswlinux-codex-st-com/drivers/vd55g0/stable/"
 									}
 								]
 							}'''
@@ -96,13 +96,13 @@ pipeline {
 							spec: '''{
 								"files": [
 									{
-										"pattern": "st-vd55g0*.deb",
-										"target": "imgswlinux-debian-local/pool/st-vd55g0-dkms/unstable/",
+										"pattern": "vd55g0*.deb",
+										"target": "imgswlinux-debian-local/pool/vd55g0-dkms/unstable/",
 										"props": "deb.distribution=unstable;deb.component=main;deb.architecture=armhf;deb.architecture=arm64"
 									},
 									{
-										"pattern": "st-vd55g0*.zip",
-										"target": "imgswlinux-releases-imgappswlinux-codex-st-com/drivers/st-vd55g0/unstable/"
+										"pattern": "vd55g0*.zip",
+										"target": "imgswlinux-releases-imgappswlinux-codex-st-com/drivers/vd55g0/unstable/"
 									}
 								]
 							}'''
@@ -116,7 +116,7 @@ pipeline {
 	post {
 		always {
 			// Remove debian packaging stuff
-			sh 'find . -maxdepth 1 -type f -name "st-vd55g0*" -exec rm -v "{}" \\;'
+			sh 'find . -maxdepth 1 -type f -name "vd55g0*" -exec rm -v "{}" \\;'
 
 			// Send mail
 			emailext (
