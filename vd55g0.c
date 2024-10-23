@@ -2,7 +2,7 @@
 /*
  * Driver for VD55G0 global shutter sensor family driver
  *
- * Copyright (C) 2022 STMicroelectronics SA
+ * Copyright (C) 2024 STMicroelectronics SA
  */
 
 #include <linux/version.h>

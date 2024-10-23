@@ -2,7 +2,7 @@
 /*
  * Firmware patches for vd55g0 sensor familly
  *
- * Copyright (C) 2022 STMicroelectronics SA
+ * Copyright (C) 2024 STMicroelectronics SA
  */
 
 #include <linux/kernel.h>
