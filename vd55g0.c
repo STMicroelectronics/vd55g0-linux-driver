@@ -49,6 +49,9 @@
 
 #define VD55G0_REG_MODEL_ID				VD55G0_REG_16BIT(0x0000)
 #define VD55G0_MODEL_ID					0x4730
+#define VD55G0_REG_REVISION				VD55G0_REG_16BIT(0x0004)
+#define VD55G0_REVISION_CUT1				0x1111
+#define VD55G0_REVISION_CUT2				0x1120
 #define VD55G0_REG_FWPATCH_REVISION			VD55G0_REG_16BIT(0x0022)
 #define VD55G0_REG_FWPATCH_START_ADDR			VD55G0_REG_8BIT(0x2000)
 #define VD55G0_REG_SYSTEM_FSM				VD55G0_REG_8BIT(0x002c)
@@ -136,7 +139,7 @@
 #define V4L2_CID_DARKCAL_PEDESTAL		(V4L2_CID_USER_BASE | 0x1021)
 #define V4L2_CID_SLAVE				(V4L2_CID_USER_BASE | 0x1022)
 
-#include "vd55g0_patch.c"
+#include "vd55g0_patches.h"
 
 static const char * const vd55g0_test_pattern_menu[] = {
 	"Disabled",
@@ -280,6 +283,7 @@ struct vd55g0_dev {
 	int data_rate_in_mbps;
 	int pclk;
 	u16 line_length;
+	u16 revision;
 	/* Lock to protect all members below */
 	struct mutex lock;
 	struct v4l2_ctrl_handler ctrl_handler;
@@ -1128,10 +1132,20 @@ error_ep:
 static int vd55g0_patch(struct vd55g0_dev *sensor)
 {
 	struct i2c_client *client = sensor->i2c_client;
-	int patch, ret;
+	struct vd55g0_patch *patch;
+	int patch_version, ret;
 
+	/* Choose appropriate patch for sensor revision */
+	if (sensor->revision == VD55G0_REVISION_CUT1)
+		patch = &vd55g0_patch_cut1;
+	else if (sensor->revision == VD55G0_REVISION_CUT2)
+		patch = &vd55g0_patch_cut2;
+	else
+		return -EINVAL;
+
+	/* Write patch */
 	ret = vd55g0_write_array(sensor, VD55G0_REG_FWPATCH_START_ADDR,
-				 sizeof(patch_array), patch_array);
+				 patch->size, patch->bin);
 	if (ret)
 		return ret;
 
@@ -1144,19 +1158,19 @@ static int vd55g0_patch(struct vd55g0_dev *sensor)
 	if (ret)
 		return ret;
 
-	patch = vd55g0_read_reg(sensor, VD55G0_REG_FWPATCH_REVISION);
-	if (patch < 0)
-		return patch;
+	/* Read back patch version */
+	patch_version = vd55g0_read_reg(sensor, VD55G0_REG_FWPATCH_REVISION);
+	if (patch_version < 0)
+		return patch_version;
 
-	if (patch != (VD55G0_FWPATCH_REVISION_MAJOR << 8) +
-	    VD55G0_FWPATCH_REVISION_MINOR) {
+	if (patch_version != (patch->major << 8) + patch->minor) {
 		dev_err(&client->dev, "bad patch version expected %d.%d got %d.%d",
-			VD55G0_FWPATCH_REVISION_MAJOR,
-			VD55G0_FWPATCH_REVISION_MINOR,
-			patch >> 8, patch & 0xff);
+			patch->major, patch->minor,
+			patch_version >> 8, patch_version & 0xff);
 		return -ENODEV;
 	}
-	dev_dbg(&client->dev, "patch %d.%d applied", patch >> 8, patch & 0xff);
+	dev_dbg(&client->dev, "patch %d.%d applied",
+		patch_version >> 8, patch_version & 0xff);
 
 	return 0;
 }
@@ -1690,7 +1704,7 @@ free_ctrls:
 static int vd55g0_detect(struct vd55g0_dev *sensor)
 {
 	struct i2c_client *client = sensor->i2c_client;
-	int id = 0;
+	int revision, id = 0;
 
 	id = vd55g0_read_reg(sensor, VD55G0_REG_MODEL_ID);
 	if (id < 0)
@@ -1700,6 +1714,20 @@ static int vd55g0_detect(struct vd55g0_dev *sensor)
 		dev_warn(&client->dev, "Unsupported sensor id %x", id);
 		return -ENODEV;
 	}
+
+	revision = vd55g0_read_reg(sensor, VD55G0_REG_REVISION);
+	dev_dbg(&client->dev, "Sensor revision 0x%x", revision);
+	if (revision < 0)
+		return revision;
+
+	if (revision != VD55G0_REVISION_CUT1 &&
+	    revision != VD55G0_REVISION_CUT2) {
+		dev_err(&client->dev, "Unsupported device revision 0x%x\n",
+			revision);
+		return -ENODEV;
+	}
+
+	sensor->revision = revision;
 
 	return 0;
 }
