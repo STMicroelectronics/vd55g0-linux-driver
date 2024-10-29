@@ -1,3 +1,9 @@
+vd55g0-dkms (1.0.3-2) unstable; urgency=medium
+
+  * Add header files to installation directory
+
+ -- Benjamin Mugnier <benjamin.mugnier@st.com>  Tue, 29 Oct 2024 09:29:36 +0100
+
 vd55g0-dkms (1.0.3-1) unstable; urgency=medium
 
   * New upstream release
