@@ -16,8 +16,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
-#include <asm/unaligned.h>
-
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -25,6 +23,12 @@
 #include <media/v4l2-subdev.h>
 
 /* Backward compatibility */
+#if KERNEL_VERSION(6, 12, 0) > LINUX_VERSION_CODE
+#include <asm/unaligned.h>
+#else
+#include <linux/unaligned.h>
+#endif
+
 #if KERNEL_VERSION(5, 18, 0) > LINUX_VERSION_CODE
 #define MIPI_CSI2_DT_RAW8	0x2a
 #define MIPI_CSI2_DT_RAW10	0x2b
