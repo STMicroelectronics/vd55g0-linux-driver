@@ -1414,9 +1414,12 @@ out:
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_pad_config *cfg)
-#else
+#elif KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
 static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_state *sd_state)
+#else
+static int vd55g0_init_state(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_state *sd_state)
 #endif
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
@@ -1461,7 +1464,9 @@ static const struct v4l2_subdev_video_ops vd55g0_video_ops = {
 };
 
 static const struct v4l2_subdev_pad_ops vd55g0_pad_ops = {
+#if KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
 	.init_cfg = vd55g0_init_cfg,
+#endif
 	.enum_mbus_code = vd55g0_enum_mbus_code,
 	.get_fmt = vd55g0_get_fmt,
 	.set_fmt = vd55g0_set_fmt,
@@ -1478,6 +1483,13 @@ static const struct v4l2_subdev_ops vd55g0_subdev_ops = {
 static const struct media_entity_operations vd55g0_subdev_entity_ops = {
 	.link_validate = v4l2_subdev_link_validate,
 };
+
+#if KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+#else
+static const struct v4l2_subdev_internal_ops vd55g0_internal_ops = {
+	.init_state = vd55g0_init_state,
+};
+#endif
 
 static int vd55g0_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 {
@@ -1973,6 +1985,10 @@ static int vd55g0_probe(struct i2c_client *client)
 	}
 
 	v4l2_i2c_subdev_init(&sensor->sd, client, &vd55g0_subdev_ops);
+#if KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+#else
+	sensor->sd.internal_ops = &vd55g0_internal_ops;
+#endif
 	sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	sensor->pad.flags = MEDIA_PAD_FL_SOURCE;
 	sensor->sd.entity.ops = &vd55g0_subdev_entity_ops;
