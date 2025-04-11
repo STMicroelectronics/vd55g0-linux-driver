@@ -1322,9 +1322,14 @@ static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(&sensor->sd, cfg,
 						 format->pad);
-#else
+#elif KERNEL_VERSION(5, 19, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(&sensor->sd, sd_state,
 						 format->pad);
+#elif KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+		fmt = v4l2_subdev_get_pad_format(&sensor->sd, sd_state,
+						 format->pad);
+#else
+		fmt = v4l2_subdev_state_get_format(sd_state, format->pad);
 #endif
 	else
 		fmt = &sensor->fmt;
@@ -1361,8 +1366,12 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(sd, cfg, 0);
-#else
+#elif KERNEL_VERSION(5, 19, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(sd, sd_state, 0);
+#elif KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+		fmt = v4l2_subdev_get_pad_format(sd, sd_state, 0);
+#else
+		fmt = v4l2_subdev_state_get_format(sd_state, 0);
 #endif
 		*fmt = format->format;
 	} else if (sensor->current_mode != new_mode ||
