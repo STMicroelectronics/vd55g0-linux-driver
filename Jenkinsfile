@@ -59,8 +59,8 @@ pipeline {
 						spec: '''{
 							"files": [
 								{
-									"pattern": "vd55g1*.deb",
-									"target": "imgswlinux-debian-local/pool/vd55g1-dkms/stable/",
+									"pattern": "vd55g0*.deb",
+									"target": "imgswlinux-debian-local/pool/vd55g0-dkms/stable/",
 									"props": "deb.distribution=stable;deb.component=main;deb.architecture=armhf;deb.architecture=arm64"
 								}
 							]
