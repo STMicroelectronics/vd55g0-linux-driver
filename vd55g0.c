@@ -16,8 +16,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 
-#include <asm/unaligned.h>
-
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -25,6 +23,12 @@
 #include <media/v4l2-subdev.h>
 
 /* Backward compatibility */
+#if KERNEL_VERSION(6, 12, 0) > LINUX_VERSION_CODE
+#include <asm/unaligned.h>
+#else
+#include <linux/unaligned.h>
+#endif
+
 #if KERNEL_VERSION(5, 18, 0) > LINUX_VERSION_CODE
 #define MIPI_CSI2_DT_RAW8	0x2a
 #define MIPI_CSI2_DT_RAW10	0x2b
@@ -1322,9 +1326,14 @@ static int vd55g0_get_fmt(struct v4l2_subdev *sd,
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(&sensor->sd, cfg,
 						 format->pad);
-#else
+#elif KERNEL_VERSION(5, 19, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(&sensor->sd, sd_state,
 						 format->pad);
+#elif KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+		fmt = v4l2_subdev_get_pad_format(&sensor->sd, sd_state,
+						 format->pad);
+#else
+		fmt = v4l2_subdev_state_get_format(sd_state, format->pad);
 #endif
 	else
 		fmt = &sensor->fmt;
@@ -1361,8 +1370,12 @@ static int vd55g0_set_fmt(struct v4l2_subdev *sd,
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(sd, cfg, 0);
-#else
+#elif KERNEL_VERSION(5, 19, 0) > LINUX_VERSION_CODE
 		fmt = v4l2_subdev_get_try_format(sd, sd_state, 0);
+#elif KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+		fmt = v4l2_subdev_get_pad_format(sd, sd_state, 0);
+#else
+		fmt = v4l2_subdev_state_get_format(sd_state, 0);
 #endif
 		*fmt = format->format;
 	} else if (sensor->current_mode != new_mode ||
@@ -1405,9 +1418,12 @@ out:
 #if KERNEL_VERSION(5, 14, 0) > LINUX_VERSION_CODE
 static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_pad_config *cfg)
-#else
+#elif KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
 static int vd55g0_init_cfg(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_state *sd_state)
+#else
+static int vd55g0_init_state(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_state *sd_state)
 #endif
 {
 	struct vd55g0_dev *sensor = to_vd55g0_dev(sd);
@@ -1452,7 +1468,9 @@ static const struct v4l2_subdev_video_ops vd55g0_video_ops = {
 };
 
 static const struct v4l2_subdev_pad_ops vd55g0_pad_ops = {
+#if KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
 	.init_cfg = vd55g0_init_cfg,
+#endif
 	.enum_mbus_code = vd55g0_enum_mbus_code,
 	.get_fmt = vd55g0_get_fmt,
 	.set_fmt = vd55g0_set_fmt,
@@ -1469,6 +1487,13 @@ static const struct v4l2_subdev_ops vd55g0_subdev_ops = {
 static const struct media_entity_operations vd55g0_subdev_entity_ops = {
 	.link_validate = v4l2_subdev_link_validate,
 };
+
+#if KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+#else
+static const struct v4l2_subdev_internal_ops vd55g0_internal_ops = {
+	.init_state = vd55g0_init_state,
+};
+#endif
 
 static int vd55g0_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 {
@@ -1964,6 +1989,10 @@ static int vd55g0_probe(struct i2c_client *client)
 	}
 
 	v4l2_i2c_subdev_init(&sensor->sd, client, &vd55g0_subdev_ops);
+#if KERNEL_VERSION(6, 8, 0) > LINUX_VERSION_CODE
+#else
+	sensor->sd.internal_ops = &vd55g0_internal_ops;
+#endif
 	sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	sensor->pad.flags = MEDIA_PAD_FL_SOURCE;
 	sensor->sd.entity.ops = &vd55g0_subdev_entity_ops;
