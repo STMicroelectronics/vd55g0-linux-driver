@@ -285,7 +285,6 @@ struct vd55g0_dev {
 	u16 oif_ctrl;
 	int nb_of_lane;
 	int data_rate_in_mbps;
-	int pclk;
 	u16 line_length;
 	u16 revision;
 	/* Lock to protect all members below */
