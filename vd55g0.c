@@ -1207,8 +1207,6 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 
 	/* Frequency to data rate is 1:1 ratio for MIPI */
 	sensor->data_rate_in_mbps = mipi_bps;
-	/* Video timing ISP path (pixel clock)  requires 804/5 mhz = 160 mhz */
-	sensor->pclk = mipi_bps / 5;
 
 	sensor->line_length = VD55G0_LINE_LENGTH_FAST;
 	if (mipi_bps < 900 * HZ_PER_MHZ)
