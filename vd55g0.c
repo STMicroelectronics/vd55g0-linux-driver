@@ -774,7 +774,7 @@ static int vd55g0_update_flash(struct vd55g0_dev *sensor, int flash_en)
 	return 0;
 }
 
-static int vd55g0_apply_reset(struct vd55g0_dev *sensor)
+static void vd55g0_apply_reset(struct vd55g0_dev *sensor)
 {
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
@@ -782,8 +782,6 @@ static int vd55g0_apply_reset(struct vd55g0_dev *sensor)
 	usleep_range(5000, 10000);
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
-	return vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_READY_TO_BOOT,
-				 VD55G0_TIMEOUT_MS);
 }
 
 static void vd55g0_fill_framefmt(struct vd55g0_dev *sensor,
@@ -1770,12 +1768,14 @@ static int vd55g0_power_on(struct device *dev)
 		goto disable_bulk;
 	}
 
-	if (sensor->reset_gpio) {
-		ret = vd55g0_apply_reset(sensor);
-		if (ret) {
-			dev_err(&client->dev, "sensor reset failed %d\n", ret);
-			goto disable_clock;
-		}
+	if (sensor->reset_gpio)
+		vd55g0_apply_reset(sensor);
+
+	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_READY_TO_BOOT,
+				VD55G0_TIMEOUT_MS);
+	if (ret) {
+		dev_err(&client->dev, "sensor reset failed %d\n", ret);
+		goto disable_clock;
 	}
 
 	ret = vd55g0_detect(sensor);
