@@ -285,7 +285,6 @@ struct vd55g0_dev {
 	u16 oif_ctrl;
 	int nb_of_lane;
 	int data_rate_in_mbps;
-	int pclk;
 	u16 line_length;
 	u16 revision;
 	/* Lock to protect all members below */
@@ -775,7 +774,7 @@ static int vd55g0_update_flash(struct vd55g0_dev *sensor, int flash_en)
 	return 0;
 }
 
-static int vd55g0_apply_reset(struct vd55g0_dev *sensor)
+static void vd55g0_apply_reset(struct vd55g0_dev *sensor)
 {
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
@@ -783,8 +782,6 @@ static int vd55g0_apply_reset(struct vd55g0_dev *sensor)
 	usleep_range(5000, 10000);
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 	usleep_range(5000, 10000);
-	return vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_READY_TO_BOOT,
-				 VD55G0_TIMEOUT_MS);
 }
 
 static void vd55g0_fill_framefmt(struct vd55g0_dev *sensor,
@@ -1207,8 +1204,6 @@ static int vd55g0_configure(struct vd55g0_dev *sensor)
 
 	/* Frequency to data rate is 1:1 ratio for MIPI */
 	sensor->data_rate_in_mbps = mipi_bps;
-	/* Video timing ISP path (pixel clock)  requires 804/5 mhz = 160 mhz */
-	sensor->pclk = mipi_bps / 5;
 
 	sensor->line_length = VD55G0_LINE_LENGTH_FAST;
 	if (mipi_bps < 900 * HZ_PER_MHZ)
@@ -1773,12 +1768,14 @@ static int vd55g0_power_on(struct device *dev)
 		goto disable_bulk;
 	}
 
-	if (sensor->reset_gpio) {
-		ret = vd55g0_apply_reset(sensor);
-		if (ret) {
-			dev_err(&client->dev, "sensor reset failed %d\n", ret);
-			goto disable_clock;
-		}
+	if (sensor->reset_gpio)
+		vd55g0_apply_reset(sensor);
+
+	ret = vd55g0_wait_state(sensor, VD55G0_SYSTEM_FSM_READY_TO_BOOT,
+				VD55G0_TIMEOUT_MS);
+	if (ret) {
+		dev_err(&client->dev, "sensor reset failed %d\n", ret);
+		goto disable_clock;
 	}
 
 	ret = vd55g0_detect(sensor);
